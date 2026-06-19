@@ -1,0 +1,6 @@
+{
+  "name": "SR Finserv",
+  "description": "Professional Legal & Loan Advisory Services providing customized commercial, home, and personal financing solutions alongside comprehensive legal drafting, registration, and consultations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
