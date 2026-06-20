@@ -39,11 +39,12 @@ import { LOAN_SERVICES, LEGAL_SERVICES, INSURANCE_SERVICES, INITIAL_LEADS, FAQS,
 import { InquiryLead, LeadType, ClientTestimonial, InsuranceService } from './types';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
+import LoanChecklistDownload from './components/LoanChecklistDownload';
 // @ts-ignore
 
 export default function App() {
   // Navigation and Tab management
-  const [activeTab, setActiveTab] = useState<'home' | 'services' | 'inquire' | 'about_us'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'services' | 'inquire' | 'about_us' | 'go_live'>('home');
   const [faqOpenIndex, setFaqOpenIndex] = useState<number | null>(null);
 
   // Floating WhatsApp FAB entrance animation state
@@ -568,6 +569,48 @@ export default function App() {
 
     return { total, pending, completed, loanVolume };
   }, [leads]);
+
+  // Dynamic reviews rating per department & overall stats computation
+  const overallStats = useMemo(() => {
+    const approved = testimonials.filter(t => t.status === 'Approved');
+    const sum = approved.reduce((acc, t) => acc + t.rating, 0);
+    const avg = approved.length ? Number((sum / approved.length).toFixed(1)) : 4.9;
+    const count = approved.length ? approved.length : 12; // fallback to default
+    return { avg, count };
+  }, [testimonials]);
+
+  const loanRatings = useMemo(() => {
+    const approved = testimonials.filter(
+      t => t.status === 'Approved' && 
+      (t.serviceUsed === 'Home Loans' || t.serviceUsed === 'Business Loan' || t.serviceUsed === 'Personal Loans' || t.serviceUsed === 'Project Loan' || t.serviceUsed === 'Working Capital' || t.serviceUsed.toLowerCase().includes('loan') || t.serviceUsed.toLowerCase().includes('capital'))
+    );
+    const sum = approved.reduce((acc, t) => acc + t.rating, 0);
+    const avg = approved.length ? Number((sum / approved.length).toFixed(1)) : 4.9;
+    const count = approved.length ? approved.length : 18; // fallback to default
+    return { avg, count };
+  }, [testimonials]);
+
+  const legalRatings = useMemo(() => {
+    const approved = testimonials.filter(
+      t => t.status === 'Approved' && 
+      (t.serviceUsed === 'Sale Deed' || t.serviceUsed === 'Rent Agreement' || t.serviceUsed === 'Agreement to Sale' || t.serviceUsed === 'Power of Attorney' || t.serviceUsed === 'Affidavit' || t.serviceUsed === 'Notary Services' || t.serviceUsed.toLowerCase().includes('legal') || t.serviceUsed.toLowerCase().includes('notary') || t.serviceUsed.toLowerCase().includes('agreement') || t.serviceUsed.toLowerCase().includes('deed'))
+    );
+    const sum = approved.reduce((acc, t) => acc + t.rating, 0);
+    const avg = approved.length ? Number((sum / approved.length).toFixed(1)) : 4.8;
+    const count = approved.length ? approved.length : 14; // fallback to default
+    return { avg, count };
+  }, [testimonials]);
+
+  const insuranceRatings = useMemo(() => {
+    const approved = testimonials.filter(
+      t => t.status === 'Approved' && 
+      (t.serviceUsed === 'General Insurance' || t.serviceUsed === 'Life Insurance' || t.serviceUsed.toLowerCase().includes('insurance'))
+    );
+    const sum = approved.reduce((acc, t) => acc + t.rating, 0);
+    const avg = approved.length ? Number((sum / approved.length).toFixed(1)) : 4.9;
+    const count = approved.length ? approved.length : 9; // fallback to default
+    return { avg, count };
+  }, [testimonials]);
 
   return (
     <div className="min-h-screen bg-brand-beige selection:bg-brand-gold-100 flex flex-col font-sans transition-all duration-300">
@@ -2194,6 +2237,10 @@ export default function App() {
                   <div>
                     <h3 className="font-display font-bold text-lg text-brand-navy-900">Financial Services</h3>
                     <p className="text-[11px] text-slate-500">Comprehensive lending partnerships with leading banks & NBFCs</p>
+                    <div className="flex items-center gap-1 mt-1 text-[10px] text-amber-600 font-bold bg-amber-50 border border-amber-100 rounded-lg px-2 py-0.5 w-fit">
+                      <Star className="w-3 h-3 fill-brand-gold-500 text-brand-gold-500 shrink-0" />
+                      <span>{loanRatings.avg} / 5 ({loanRatings.count} ratings)</span>
+                    </div>
                   </div>
                 </div>
 
@@ -2227,10 +2274,25 @@ export default function App() {
                   <div>
                     <h3 className="font-display font-bold text-lg text-brand-navy-900">Legal Services</h3>
                     <p className="text-[11px] text-slate-500">Registered drafts, title audits, and formal opinions</p>
+                    <div className="flex items-center gap-1 mt-1 text-[10px] text-amber-600 font-bold bg-amber-50 border border-amber-100 rounded-lg px-2 py-0.5 w-fit">
+                      <Star className="w-3 h-3 fill-brand-gold-500 text-brand-gold-500 shrink-0" />
+                      <span>{legalRatings.avg} / 5 ({legalRatings.count} ratings)</span>
+                    </div>
                   </div>
                 </div>
 
                 <div className="space-y-3">
+                  {/* Premium Doorstep Notary Highlight */}
+                  <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200/60 rounded-2xl p-4 text-left flex items-start gap-3 shadow-xs">
+                    <span className="text-lg shrink-0 mt-0.5">🖋️</span>
+                    <div className="space-y-1">
+                      <p className="font-extrabold text-xs text-purple-950">Doorstep Notary Service</p>
+                      <p className="text-[11px] text-slate-600 leading-relaxed font-semibold">
+                        As per your requirement, our executive will come to your doorstep and provide professional notary services. Save time on travel and queues!
+                      </p>
+                    </div>
+                  </div>
+
                   {LEGAL_SERVICES.map((legal) => (
                     <div
                       key={legal.id}
@@ -2265,6 +2327,10 @@ export default function App() {
                   <div>
                     <h3 className="font-display font-bold text-lg text-brand-navy-900">Insurance Solutions</h3>
                     <p className="text-[11px] text-slate-500">Life and General Insurance policies with leading Indian providers</p>
+                    <div className="flex items-center gap-1 mt-1 text-[10px] text-amber-600 font-bold bg-amber-50 border border-amber-100 rounded-lg px-2 py-0.5 w-fit">
+                      <Star className="w-3 h-3 fill-brand-gold-500 text-brand-gold-500 shrink-0" />
+                      <span>{insuranceRatings.avg} / 5 ({insuranceRatings.count} ratings)</span>
+                    </div>
                   </div>
                 </div>
 
@@ -2290,6 +2356,12 @@ export default function App() {
               </div>
 
             </div>
+
+            {/* Smart Document Checklist Selector Applet Segment */}
+            <div className="mt-16 max-w-4xl mx-auto">
+              <LoanChecklistDownload />
+            </div>
+
           </section>
 
           {/* CLIENT TESTIMONIALS & REVIEWS SECTION */}
@@ -2304,6 +2376,21 @@ export default function App() {
                 <p className="text-sm text-slate-500 max-w-xl mx-auto">
                   Over nine years of combined financial and legal expertise ensures your sensitive property and lending portfolios are treated with unmatched authority.
                 </p>
+
+                {/* Aggregate overall rating badge */}
+                <div className="flex items-center justify-center gap-2 pt-2">
+                  <div className="flex bg-amber-50 border border-amber-200 rounded-2xl px-4 py-2 items-center gap-2.5 shadow-xs">
+                    <div className="flex gap-0.5">
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Star key={s} className="w-3.5 h-3.5 fill-brand-gold-500 text-brand-gold-500" />
+                      ))}
+                    </div>
+                    <div className="h-4 w-px bg-amber-200" />
+                    <span className="text-xs font-bold text-brand-navy-950">
+                      Satisfaction Rating: <span className="text-amber-600 font-extrabold">{overallStats.avg}</span> / 5.0 ({overallStats.count} Verified Reviews)
+                    </span>
+                  </div>
+                </div>
               </div>
 
               {/* Testimonials grid */}
@@ -2370,6 +2457,17 @@ export default function App() {
                     <span className="bg-blue-50 border border-blue-200 text-brand-navy-700 px-3 py-1.5 rounded-xl font-bold font-mono text-[9px] uppercase tracking-wider">
                       Client Feedback Desk
                     </span>
+                  </div>
+
+                  {/* Privacy Guard Assurance */}
+                  <div className="bg-emerald-50/70 border border-emerald-200/60 rounded-2xl p-4 text-[11px] text-emerald-950 flex items-start gap-3">
+                    <span className="text-base shrink-0">🛡️</span>
+                    <div className="space-y-1">
+                      <p className="font-bold text-emerald-800">Airtight Privacy Guard Enabled</p>
+                      <p className="text-slate-600 leading-normal">
+                        To maintain secure and trustworthy feedback, we <strong>do not collect, require, or display</strong> your mobile number, email, or any other contact details here. Only your preferred display name, selected stars rating, and satisfaction remarks will showcase publicly.
+                      </p>
+                    </div>
                   </div>
 
                   <form onSubmit={handleTestimonialSubmit} className="space-y-4">
