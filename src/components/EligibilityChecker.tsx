@@ -9,7 +9,7 @@ export default function EligibilityChecker() {
 
   const interestRate = useMemo(() => {
     switch (loanType) {
-      case 'home': return 8.65;
+      case 'home': return 7.20;
       case 'business': return 12.0;
       case 'personal': return 11.5;
     }

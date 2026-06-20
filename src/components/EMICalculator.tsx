@@ -3,7 +3,7 @@ import { Calculator, DollarSign, Calendar, TrendingUp } from 'lucide-react';
 
 export default function EMICalculator() {
   const [principal, setPrincipal] = useState<number>(2500000); // 25 Lakhs
-  const [interestRate, setInterestRate] = useState<number>(8.75); // 8.75%
+  const [interestRate, setInterestRate] = useState<number>(7.20); // 7.20%
   const [tenure, setTenure] = useState<number>(20); // 20 years
   const [tenureType, setTenureType] = useState<'years' | 'months'>('years');
 
@@ -171,11 +171,11 @@ export default function EMICalculator() {
               onChange={(e) => setInterestRate(Number(e.target.value))}
               className="w-full accent-brand-navy-600 h-2 bg-brand-navy-100 rounded-lg cursor-pointer"
             />
-            <div className="flex justify-between text-xs text-slate-400">
+            <div className="flex justify-between text-[11px] text-slate-400">
               <span>5%</span>
-              <span>8.5% (Typical Home)</span>
-              <span>12% (Typical Business)</span>
-              <span>20%</span>
+              <span>7.2% (Home Loan Promo)</span>
+              <span>8.7% (Mortgage Loan)</span>
+              <span>12%+ (Business Loan)</span>
             </div>
           </div>
 

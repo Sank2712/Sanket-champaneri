@@ -12,6 +12,7 @@ import {
   PlusCircle,
   Clock,
   User,
+  UserCheck,
   Users,
   Search,
   Filter,
@@ -29,16 +30,17 @@ import {
   Star,
   MessageSquare,
   MessageCircle,
-  Globe
+  Globe,
+  Instagram
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { LOAN_SERVICES, LEGAL_SERVICES, INSURANCE_SERVICES, INITIAL_LEADS, FAQS, INITIAL_TESTIMONIALS } from './data';
 import { InquiryLead, LeadType, ClientTestimonial, InsuranceService } from './types';
-import EMICalculator from './components/EMICalculator';
-import EligibilityChecker from './components/EligibilityChecker';
+// @ts-ignore
 
 export default function App() {
   // Navigation and Tab management
-  const [activeTab, setActiveTab] = useState<'home' | 'services' | 'calculators' | 'inquire' | 'about_us'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'services' | 'inquire' | 'about_us'>('home');
   const [faqOpenIndex, setFaqOpenIndex] = useState<number | null>(null);
 
   // Floating WhatsApp FAB entrance animation state
@@ -53,7 +55,16 @@ export default function App() {
   // Client Testimonials state
   const [testimonials, setTestimonials] = useState<ClientTestimonial[]>(() => {
     const saved = localStorage.getItem('sr_finserv_testimonials');
-    return saved ? JSON.parse(saved) : INITIAL_TESTIMONIALS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // Filter out old mock/fake reviews (test-1, test-2, test-3, test-4)
+        return parsed.filter((t: any) => !['test-1', 'test-2', 'test-3', 'test-4'].includes(t.id));
+      } catch (e) {
+        return INITIAL_TESTIMONIALS;
+      }
+    }
+    return INITIAL_TESTIMONIALS;
   });
 
   useEffect(() => {
@@ -62,17 +73,12 @@ export default function App() {
 
   // Submit Testimonial Form State
   const [newTestimonialName, setNewTestimonialName] = useState('');
-  const [newTestimonialService, setNewTestimonialService] = useState('Home Loan Advisory');
+  const [newTestimonialService, setNewTestimonialService] = useState('Home Loans');
   const [newTestimonialText, setNewTestimonialText] = useState('');
   const [newTestimonialPermission, setNewTestimonialPermission] = useState(true);
   const [newTestimonialRating, setNewTestimonialRating] = useState(5);
   const [testimonialSubmitted, setTestimonialSubmitted] = useState(false);
   
-  // Selected Service Detail Modal Helper
-  const [selectedLoanService, setSelectedLoanService] = useState<typeof LOAN_SERVICES[0] | null>(null);
-  const [selectedLegalService, setSelectedLegalService] = useState<typeof LEGAL_SERVICES[0] | null>(null);
-  const [selectedInsuranceService, setSelectedInsuranceService] = useState<typeof INSURANCE_SERVICES[0] | null>(null);
-
   // Leads & CRM Management State
   const [leads, setLeads] = useState<InquiryLead[]>(() => {
     const saved = localStorage.getItem('sr_finserv_leads');
@@ -106,9 +112,6 @@ export default function App() {
     } else if (activeTab === 'services') {
       const el = document.getElementById('services-section');
       if (el) el.scrollIntoView({ behavior: 'smooth' });
-    } else if (activeTab === 'calculators') {
-      const el = document.getElementById('calculators-section');
-      if (el) el.scrollIntoView({ behavior: 'smooth' });
     } else if (activeTab === 'inquire') {
       const el = document.getElementById('inquiry-form-section');
       if (el) el.scrollIntoView({ behavior: 'smooth' });
@@ -126,29 +129,34 @@ export default function App() {
     fullName: '',
     phone: '',
     email: '',
-    leadType: 'loan' as LeadType,
-    subType: 'Home Loan',
-    amount: 1500000,
-    details: '',
-    bestTimeToCall: 'Mornings 10 AM - 1 PM'
+    requirement: 'Loan services' as 'Loan services' | 'Insurance services' | 'Legal services',
   });
   const [formSubmitted, setFormSubmitted] = useState<boolean>(false);
   const [lastSubmittedId, setLastSubmittedId] = useState<string>('');
 
   // Handle service prefill choice
   const handlePrefillInquiry = (type: LeadType, name: string) => {
+    let req: 'Loan services' | 'Insurance services' | 'Legal services' = 'Loan services';
+    if (type === 'insurance') {
+      req = 'Insurance services';
+    } else if (type === 'legal') {
+      req = 'Legal services';
+    }
     setFormData(prev => ({
       ...prev,
-      leadType: type,
-      subType: name,
-      details: `Hi! I am looking for detailed consultation and assistance regarding ${name} services with SR Finserv.`
+      requirement: req,
     }));
     setActiveTab('inquire');
-    setSelectedLoanService(null);
-    setSelectedLegalService(null);
-    setSelectedInsuranceService(null);
     
-    // Scroll smoothly to form
+    // Direct inform on WhatsApp: e.g. "Hello Sanket! I'm interested in Home Loans"
+    const customerName = formData.fullName || 'A customer';
+    const whatsappMessage = `Hello Sanket! ${customerName} has requested information about your "${name}" service. Please assist.`;
+    const whatsappUrl = `https://wa.me/918487974404?text=${encodeURIComponent(whatsappMessage)}`;
+    
+    // Open dynamic WhatsApp chat with Sanket
+    window.open(whatsappUrl, '_blank');
+
+    // Scroll smoothly to form contact section
     const element = document.getElementById('inquiry-form-section');
     if (element) {
       element.scrollIntoView({ behavior: 'smooth' });
@@ -159,23 +167,28 @@ export default function App() {
   const handleInquirySubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.fullName || !formData.phone) {
-      alert('Please fill in your name and phone number so we can consult you.');
+      alert('Please fill in your Name and Mo. Number so we can consult you.');
       return;
     }
 
     const newId = `lead-${Date.now()}`;
+    let leadType: LeadType = 'loan';
+    if (formData.requirement === 'Insurance services') {
+      leadType = 'insurance';
+    } else if (formData.requirement === 'Legal services') {
+      leadType = 'legal';
+    }
+
     const newLead: InquiryLead = {
       id: newId,
       fullName: formData.fullName,
       phone: formData.phone,
       email: formData.email || 'N/A',
-      leadType: formData.leadType,
-      subType: formData.subType,
-      amount: formData.leadType === 'loan' ? Number(formData.amount) : undefined,
-      details: formData.details || `Requested advisory for ${formData.subType}`,
+      leadType: leadType,
+      subType: formData.requirement,
+      details: `Requested advisory for ${formData.requirement}`,
       status: 'New',
       createdAt: new Date().toISOString(),
-      bestTimeToCall: formData.bestTimeToCall,
       notes: ''
     };
 
@@ -188,11 +201,7 @@ export default function App() {
       fullName: '',
       phone: '',
       email: '',
-      leadType: 'loan',
-      subType: 'Home Loan',
-      amount: 1500000,
-      details: '',
-      bestTimeToCall: 'Mornings 10 AM - 1 PM'
+      requirement: 'Loan services',
     });
   };
 
@@ -301,83 +310,53 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => { setActiveTab('home'); setIsCrmMode(false); }}>
-            <div className="w-11 h-11 bg-brand-navy-900 rounded-xl flex items-center justify-center border-2 border-brand-gold-500 shadow-md">
-              <span className="font-display font-black text-xl text-brand-gold-500 tracking-tighter">SR</span>
+            <div className="w-11 h-11 bg-brand-navy-600 rounded-xl flex items-center justify-center border border-brand-navy-100 shadow-xs">
+              <span className="font-display font-black text-xl text-white tracking-tighter">SR</span>
             </div>
             <div>
               <span id="brand-title" className="font-display text-xl font-extrabold text-brand-navy-950 block tracking-tight">
                 SR Finserv
               </span>
-              <span className="text-[10px] uppercase tracking-wider font-bold text-brand-gold-600 block -mt-1">
+              <span className="text-[10px] uppercase tracking-wider font-extrabold text-brand-navy-600 block -mt-1">
                 Legal & Loans Advisory
               </span>
             </div>
           </div>
 
           {/* Nav Links */}
-          <nav className="hidden md:flex items-center gap-7">
+          <nav className="hidden md:flex items-center gap-8">
             <button
               onClick={() => { setActiveTab('home'); setIsCrmMode(false); }}
-              className={`text-sm font-semibold transition-colors ${activeTab === 'home' && !isCrmMode ? 'text-brand-navy-600 font-bold' : 'text-slate-600 hover:text-brand-navy-900'}`}
+              className={`text-base font-bold transition-colors ${activeTab === 'home' && !isCrmMode ? 'text-brand-navy-600 border-b-2 border-brand-navy-600 pb-1' : 'text-slate-600 hover:text-brand-navy-900'}`}
             >
               Overview
             </button>
             <button
               onClick={() => { setActiveTab('services'); setIsCrmMode(false); }}
-              className={`text-sm font-semibold transition-colors ${activeTab === 'services' && !isCrmMode ? 'text-brand-navy-600 font-bold' : 'text-slate-600 hover:text-brand-navy-900'}`}
+              className={`text-base font-bold transition-colors ${activeTab === 'services' && !isCrmMode ? 'text-brand-navy-600 border-b-2 border-brand-navy-600 pb-1' : 'text-slate-600 hover:text-brand-navy-900'}`}
             >
               Services
             </button>
             <button
-              onClick={() => { setActiveTab('calculators'); setIsCrmMode(false); }}
-              className={`text-sm font-semibold transition-colors ${activeTab === 'calculators' && !isCrmMode ? 'text-brand-navy-600 font-bold' : 'text-slate-600 hover:text-brand-navy-900'}`}
-            >
-              Plan Outflow
-            </button>
-            <button
               onClick={() => { setActiveTab('about_us'); setIsCrmMode(false); }}
-              className={`text-sm font-semibold transition-colors ${activeTab === 'about_us' && !isCrmMode ? 'text-brand-navy-600 font-bold' : 'text-slate-600 hover:text-brand-navy-900'}`}
+              className={`text-base font-bold transition-colors ${activeTab === 'about_us' && !isCrmMode ? 'text-brand-navy-600 border-b-2 border-brand-navy-600 pb-1' : 'text-slate-600 hover:text-brand-navy-900'}`}
             >
               About Us
             </button>
             <button
               onClick={() => { setActiveTab('inquire'); setIsCrmMode(false); }}
-              className={`text-sm font-semibold transition-colors ${activeTab === 'inquire' && !isCrmMode ? 'text-brand-navy-600 font-bold' : 'text-slate-600 hover:text-brand-navy-900'}`}
+              className={`text-base font-bold transition-colors ${activeTab === 'inquire' && !isCrmMode ? 'text-brand-navy-600 border-b-2 border-brand-navy-600 pb-1' : 'text-slate-600 hover:text-brand-navy-900'}`}
             >
               Book Callback
             </button>
-            <button
-              onClick={() => { setActiveTab('go_live'); setIsCrmMode(false); }}
-              className={`text-sm font-semibold transition-colors flex items-center gap-1.5 bg-brand-gold-500/15 text-brand-navy-950 hover:bg-brand-gold-500/25 border border-brand-gold-500/30 px-3 py-1.5 rounded-xl ${activeTab === 'go_live' && !isCrmMode ? 'ring-2 ring-brand-gold-500 font-extrabold bg-brand-gold-500/20' : 'hover:scale-102 transition-all'}`}
-            >
-              <Globe className="w-3.5 h-3.5 text-brand-gold-600 animate-pulse" />
-              <span>Go-Live (srfinserv.co)</span>
-            </button>
           </nav>
 
-          {/* Action button - Office switch */}
+          {/* Action badge - Simple & Secure */}
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setIsCrmMode(!isCrmMode)}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all ${
-                isCrmMode
-                  ? 'bg-brand-gold-500 text-brand-navy-950 border-brand-gold-600'
-                  : 'bg-brand-navy-50 text-brand-navy-800 hover:bg-brand-navy-100 border-brand-navy-100'
-              }`}
-            >
-              {isCrmMode ? (
-                <>
-                  <Layers className="w-3.5 h-3.5" />
-                  <span>Exit Workspace</span>
-                </>
-              ) : (
-                <>
-                  <Lock className="w-3.5 h-3.5 text-brand-gold-600" />
-                  <span>Advisor CRM ({leads.length})</span>
-                </>
-              )}
-            </button>
+            <span className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-bold bg-blue-50 text-brand-navy-600 border border-blue-100">
+              <Shield className="w-4 h-4 text-brand-navy-600" />
+              <span>Doorstep Service</span>
+            </span>
           </div>
         </div>
       </header>
@@ -822,7 +801,7 @@ export default function App() {
                   <div className="space-y-1.5 text-center md:text-left">
                     <span className="text-[10px] uppercase font-bold tracking-widest text-[#25D366] bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">GoDaddy India Partner Lookup</span>
                     <h2 className="font-display font-black text-2.5xl text-brand-navy-950">Confirm "srfinserv.co" Target Registry</h2>
-                    <p className="text-xs text-slate-500 font-sans">Official domain setup for Sanket Bhavsar's private consultancy.</p>
+                    <p className="text-xs text-slate-500 font-sans">Official domain setup for Sanket Champaneri's private consultancy.</p>
                   </div>
                   <div className="bg-slate-100 px-4 py-3.5 rounded-2xl flex items-center gap-3 border border-slate-200 self-stretch md:self-auto justify-center">
                     <span className="text-2xl">🇮🇳</span>
@@ -853,7 +832,7 @@ export default function App() {
                     </div>
 
                     <div className="p-4 bg-yellow-50 border border-yellow-200 text-yellow-800 text-xs rounded-xl leading-relaxed space-y-1">
-                      <span className="font-bold">⚠️ Notice to Sanket Bhavsar:</span>
+                      <span className="font-bold">⚠️ Notice to Sanket Champaneri:</span>
                       <p>Saves hours of troubleshooting. This wizard configures standard production server hooks. Once payment verifies step-by-step, we couple the DNS records to launch on GoDaddy.</p>
                     </div>
                   </div>
@@ -1015,31 +994,87 @@ export default function App() {
                           </div>
                         </div>
 
-                        {/* QR Code and VPA Section */}
-                        <div className="flex flex-col sm:flex-row items-center gap-6 justify-center bg-white p-5 rounded-xl border border-slate-100">
-                          {/* Simulated QR Code */}
-                          <div className="w-32 h-32 bg-slate-50 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center p-2 text-center text-[10px] relative">
-                            {/* Inner QR patterns */}
-                            <div className="absolute inset-2 border-2 border-brand-navy-950 flex flex-col justify-between p-1 bg-slate-50">
-                              <div className="flex justify-between"><span className="w-4 h-4 bg-slate-900" /><span className="w-4 h-4 bg-slate-900" /></div>
-                              <div className="text-slate-400 font-bold text-[8px] tracking-tighter leading-none">UPI DISP-PAY</div>
-                              <div className="flex justify-between"><span className="w-4 h-4 bg-slate-900" /><span className="w-2 h-2 bg-emerald-500 animate-ping" /></div>
-                            </div>
+                        {/* Dynamic UPI QR Code Component */}
+                        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
+                          <div className="text-center space-y-1 pb-1">
+                            <span className="text-[10px] font-black tracking-widest text-emerald-600 uppercase bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
+                              ⚡ Fully Dynamic UPI QR Generator
+                            </span>
+                            <p className="text-[11px] text-slate-500 pt-1">Scan this dynamic code with any mobile UPI app to instantly prefill payment parameters.</p>
                           </div>
 
-                          <div className="space-y-3.5 flex-1 w-full">
-                            <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Your UPI ID (VPA)</label>
-                              <input
-                                type="text"
-                                value={goLiveUpiId}
-                                onChange={(e) => setGoLiveUpiId(e.target.value)}
-                                className="w-full text-xs p-3 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-navy-600 font-mono"
-                              />
+                          <div className="flex flex-col md:flex-row items-center gap-6 justify-center">
+                            
+                            {/* Live QR Code SVG Frame */}
+                            <div className="bg-white p-4.5 rounded-2xl border border-slate-200.5 flex flex-col items-center justify-center shadow-md relative group hover:shadow-lg transition-all">
+                              <div className="bg-white p-2.5 rounded-xl border border-slate-100 flex items-center justify-center">
+                                <QRCodeSVG 
+                                  value={`upi://pay?pa=${goLiveUpiId}&pn=Sanket%20Champaneri%20SR%20Finserv&am=606.82&cu=INR&tn=SR%20Finserv%20GoDaddy%20Setup`}
+                                  size={160}
+                                  bgColor="#FFFFFF"
+                                  fgColor="#0B132B"
+                                  level="M"
+                                  includeMargin={true}
+                                />
+                              </div>
+
+                              {/* Small central logo or accent bar representing India interface */}
+                              <div className="mt-2.5 flex items-center gap-1.5 px-3 py-1 bg-brand-navy-950 text-white rounded-lg text-[9px] font-bold select-none">
+                                <span className="animate-pulse text-[#25D366]">●</span>
+                                <span className="tracking-wide">BHIM UPI LIVE</span>
+                              </div>
                             </div>
-                            <p className="text-[11px] text-slate-500 leading-normal leading-relaxed">
-                              Simulates a standard UPI payment request. App sends approval demand directly to {goLiveUpiId}.
-                            </p>
+
+                            {/* Info and customization fields */}
+                            <div className="space-y-4 flex-1 w-full">
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">
+                                  Payee UPI VPA Address (Live Dynamic)
+                                </label>
+                                <div className="relative">
+                                  <input
+                                    type="text"
+                                    value={goLiveUpiId}
+                                    onChange={(e) => setGoLiveUpiId(e.target.value)}
+                                    className="w-full text-xs p-3.5 pr-10 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-navy-600 font-mono font-bold text-brand-navy-900"
+                                    placeholder="e.g. 8487974404@ybl"
+                                  />
+                                  <span className="absolute right-3.5 top-3.5 text-xs">✏️</span>
+                                </div>
+                                <span className="text-[9px] text-slate-400 block font-semibold">
+                                  The generated QR code instantly updates as you compile/type your target VPA.
+                                </span>
+                              </div>
+
+                              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5">
+                                <div className="flex justify-between text-[11px]">
+                                  <span className="text-slate-500 font-medium">Merchant/Name:</span>
+                                  <span className="font-extrabold text-brand-navy-950">SR Finserv Advisory</span>
+                                </div>
+                                <div className="flex justify-between text-[11px]">
+                                  <span className="text-slate-500 font-medium">Specified Net Cost:</span>
+                                  <span className="font-mono font-bold text-brand-navy-900">₹606.82 (INR)</span>
+                                </div>
+                                <div className="flex justify-between text-[11px] border-t border-slate-200 pt-1.5 mt-1.5">
+                                  <span className="text-slate-500 font-medium text-[10px]">Embedded URI:</span>
+                                  <span className="font-mono text-[9px] text-slate-400 text-right break-all truncate max-w-[150px]">
+                                    upi://pay?pa={goLiveUpiId}...
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                          </div>
+
+                          {/* UPI App Integration Guide */}
+                          <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-4 text-xs text-slate-400 font-semibold">
+                            <span>Supported Apps:</span>
+                            <div className="flex items-center gap-3">
+                              <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-extrabold">GPay</span>
+                              <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-extrabold">PhonePe</span>
+                              <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-extrabold">Paytm</span>
+                              <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-extrabold">BHIM</span>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1174,7 +1209,7 @@ export default function App() {
                         </div>
                         <div className="flex justify-between">
                           <span>Billed Person:</span>
-                          <span className="text-white">Sanket Bhavsar</span>
+                          <span className="text-white">Sanket Champaneri</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Associated Phone:</span>
@@ -1239,18 +1274,18 @@ export default function App() {
         <main className="flex-1 bg-slate-50">
           
           {/* Cover Header Hero */}
-          <section className="bg-brand-navy-900 text-white py-16 relative overflow-hidden border-b border-brand-navy-800">
-            <div className="absolute top-0 right-0 w-80 h-80 bg-brand-gold-500/10 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute bottom-0 left-0 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+          <section className="bg-white py-16 relative overflow-hidden border-b border-brand-navy-100">
+            <div className="absolute top-0 right-0 w-80 h-80 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-80 h-80 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
             
             <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10 space-y-4">
-              <span className="text-xs uppercase bg-brand-navy-600 border border-brand-navy-200 px-3 py-1.5 rounded-full font-bold">
+              <span className="text-xs uppercase bg-blue-50 text-brand-navy-700 border border-blue-100 px-4 py-2 rounded-full font-bold inline-block">
                 Our Genesis & Leadership
               </span>
-              <h1 className="font-display text-4xl sm:text-5xl font-extrabold text-white tracking-tight">
-                About <span className="text-brand-navy-600 font-black bg-white px-2.5 py-0.5 rounded-xl ml-1">SR Finserv</span>
+              <h1 className="font-display text-4xl sm:text-5xl font-extrabold text-brand-navy-950 tracking-tight">
+                About <span className="text-white font-black bg-brand-navy-600 px-3.5 py-1 rounded-2xl ml-1">SR Finserv</span>
               </h1>
-              <p className="text-slate-300 text-sm sm:text-base max-w-2xl mx-auto leading-relaxed">
+              <p className="text-slate-600 text-base sm:text-lg max-w-2xl mx-auto leading-relaxed font-medium">
                 Backed by 7 years of deep banking loan department operations combined with 2 years of independent legal execution. We solve rigid banking obstacles and draft seamless stamp-duty contracts.
               </p>
             </div>
@@ -1267,7 +1302,7 @@ export default function App() {
                     9 Years of Integrated Banking & Legal Expertise
                   </h2>
                   <p className="text-slate-600 text-sm leading-relaxed">
-                    SR Finserv was established by Sanket Bhavsar to solve a massive pain point in Ahmedabad's property market. Having spent <strong className="text-brand-navy-950">7 intense years directly inside major banking loans departments</strong>, Sanket observed first-hand why decent families and self-employed micro-enterprises were being turned down by automated systems over simple document gaps.
+                    SR Finserv was established by Sanket Champaneri to solve a massive pain point in Ahmedabad's property market. Having spent <strong className="text-brand-navy-950">7 intense years directly inside major banking loans departments</strong>, Sanket observed first-hand why decent families and self-employed micro-enterprises were being turned down by automated systems over simple document gaps.
                   </p>
                   <p className="text-slate-600 text-sm leading-relaxed">
                     For the past <strong className="text-brand-navy-950">2 years</strong>, we have added robust, certified property law drafting and execution. We specialize in preparing <strong className="text-brand-navy-950">Sale Deeds, Agreements to Sale, General/Special Power of Attorney (PoA), verified Affidavits</strong>, and providing verified, certified <strong className="text-brand-navy-950">Notary Public stamp services</strong>.
@@ -1345,17 +1380,8 @@ export default function App() {
                 {/* Visual Portrait Container */}
                 <div className="bg-white rounded-3xl overflow-hidden shadow-sm border border-brand-navy-100 p-6 space-y-5 text-center">
                   
-                  {/* Photo Headshot */}
-                  <div className="relative w-44 h-44 mx-auto rounded-2xl overflow-hidden border-2 border-brand-navy-600 shadow-md bg-slate-100">
-                    <img
-                      src="/src/assets/images/sanket_portrait_1781890609638.jpg"
-                      alt="Sanket Bhavsar - Founder of SR Finserv"
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-
                   <div className="space-y-1">
-                    <h3 className="font-display font-black text-xl text-brand-navy-950">Sanket Bhavsar</h3>
+                    <h3 className="font-display font-black text-xl text-brand-navy-950">Sanket Champaneri</h3>
                     <p className="text-xs uppercase tracking-wider font-extrabold text-brand-navy-600">Founder & Principal Consultant</p>
                     <p className="text-[10px] text-slate-400 font-mono">7 Yrs Banking Loans Dept. | 2 Yrs Legal & Notary Operations</p>
                   </div>
@@ -1372,18 +1398,19 @@ export default function App() {
                 </div>
 
                 {/* Direct Contact Details Block */}
-                <div className="bg-brand-navy-950 text-white rounded-3xl p-6 border border-brand-navy-800 shadow-lg space-y-5">
-                  <h4 className="font-display font-bold text-base text-white border-b border-brand-navy-800 pb-3">
-                    Ahmedabad Office Office
+                <div className="bg-white text-brand-navy-950 rounded-3xl p-8 border border-brand-navy-100 shadow-sm space-y-6">
+                  <h4 className="font-display font-black text-lg text-brand-navy-950 border-b border-brand-navy-100 pb-3 flex items-center justify-between">
+                    <span>Ahmedabad Head Office</span>
+                    <span className="text-[10px] bg-blue-50 text-brand-navy-600 px-2 py-0.5 rounded-md font-mono font-bold uppercase">Certified</span>
                   </h4>
 
-                  <div className="space-y-4 text-xs">
+                  <div className="space-y-5 text-sm">
                     {/* Mail */}
                     <div className="flex items-start gap-4">
-                      <span className="text-lg shrink-0 mt-0.5">✉️</span>
+                      <span className="text-xl shrink-0 mt-0.5">✉️</span>
                       <div>
-                        <span className="text-slate-400 block font-semibold">Direct Email Support</span>
-                        <a href="mailto:sanketbhavsar27@gmail.com" className="font-bold text-brand-navy-200 hover:underline font-mono text-[13px]">
+                        <span className="text-slate-500 block font-bold text-xs uppercase tracking-wider">Direct Email Support</span>
+                        <a href="mailto:sanketbhavsar27@gmail.com" className="font-extrabold text-brand-navy-600 hover:underline font-mono text-base">
                           sanketbhavsar27@gmail.com
                         </a>
                       </div>
@@ -1391,10 +1418,10 @@ export default function App() {
 
                     {/* Direct phone line */}
                     <div className="flex items-start gap-4">
-                      <span className="text-lg shrink-0 mt-0.5">📞</span>
+                      <span className="text-xl shrink-0 mt-0.5">📞</span>
                       <div>
-                        <span className="text-slate-400 block font-semibold">Direct Phone Helpline</span>
-                        <a href="tel:+918487974404" className="font-bold text-brand-navy-200 hover:underline font-mono text-[13px]">
+                        <span className="text-slate-500 block font-bold text-xs uppercase tracking-wider">Direct Phone Helpline</span>
+                        <a href="tel:+918487974404" className="font-extrabold text-brand-navy-600 hover:underline font-mono text-base">
                           +91 84879 74404
                         </a>
                       </div>
@@ -1402,10 +1429,10 @@ export default function App() {
 
                     {/* Regional coverage / Address */}
                     <div className="flex items-start gap-4">
-                      <span className="text-lg shrink-0 mt-0.5">📍</span>
+                      <span className="text-xl shrink-0 mt-0.5">📍</span>
                       <div>
-                        <span className="text-slate-400 block font-semibold">Physical Head Office Address</span>
-                        <span className="text-slate-200 leading-relaxed block text-[11px] font-sans mt-0.5">
+                        <span className="text-slate-500 block font-bold text-xs uppercase tracking-wider">Physical Head Office Address</span>
+                        <span className="text-slate-700 leading-relaxed block text-sm font-semibold mt-0.5">
                           87, Venus Alfa Market, Venus Atlantis, Near Shell Petrol Pump, Prahladnagar, Ahmedabad - 380015.
                         </span>
                       </div>
@@ -1413,19 +1440,36 @@ export default function App() {
 
                     {/* SLA Priority */}
                     <div className="flex items-start gap-4">
-                      <span className="text-lg shrink-0 mt-0.5">⚡</span>
+                      <span className="text-xl shrink-0 mt-0.5">⚡</span>
                       <div>
-                        <span className="text-slate-400 block font-semibold">Priority SLA Guarantee</span>
-                        <span className="text-slate-200">
+                        <span className="text-slate-500 block font-bold text-xs uppercase tracking-wider">Priority SLA Guarantee</span>
+                        <span className="text-slate-700 font-semibold block text-xs sm:text-sm">
                           Within 2 Hours (Sanket directly responds to calls and queries).
                         </span>
+                      </div>
+                    </div>
+
+                    {/* Instagram Support */}
+                    <div className="flex items-start gap-4">
+                      <span className="text-xl shrink-0 mt-0.5">📸</span>
+                      <div>
+                        <span className="text-slate-500 block font-bold text-xs uppercase tracking-wider">On Instagram</span>
+                        <a 
+                          href="https://www.instagram.com/SR_Finserv/" 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="font-extrabold text-pink-600 hover:text-pink-700 hover:underline flex items-center gap-1.5 text-base mt-0.5"
+                        >
+                          <Instagram className="w-4 h-4 shrink-0" />
+                          @SR_Finserv
+                        </a>
                       </div>
                     </div>
                   </div>
 
                   <button
                     onClick={() => { setActiveTab('inquire'); }}
-                    className="w-full bg-brand-navy-600 hover:bg-brand-navy-800 text-white font-black text-xs py-3.5 rounded-xl transition-all shadow-md text-center mt-2.5"
+                    className="w-full bg-brand-navy-600 hover:bg-brand-navy-800 text-white font-black text-sm py-4 rounded-xl transition-all shadow-md text-center mt-2.5"
                   >
                     Launch Priority Advisor Call Back
                   </button>
@@ -1521,145 +1565,136 @@ export default function App() {
         /* STANDARD USER-FACING FRONTEND */
         <>
           {/* HERO BANNER */}
-          <section className="relative overflow-hidden bg-brand-navy-900 text-white pt-16 pb-20 md:py-28 border-b border-brand-navy-800">
-            <div className="absolute top-0 right-0 w-96 h-96 bg-brand-gold-500/10 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+          <section className="relative overflow-hidden bg-white text-brand-navy-950 pt-16 pb-20 md:py-28 border-b border-brand-navy-100">
+            <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-600/5 rounded-full blur-3xl pointer-events-none" />
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
                 
                 {/* Left Header */}
-                <div className="lg:col-span-7 space-y-6">
+                <div className="lg:col-span-7 space-y-7">
                   {/* Trust Badge */}
-                  <div className="inline-flex items-center gap-2.5 bg-brand-gold-500/10 border border-brand-gold-500/20 px-4 py-2 rounded-2xl text-brand-gold-100 text-xs font-bold shadow-xs">
-                    <Award className="w-4 h-4 text-brand-gold-500 shrink-0" />
-                    <span>9 Years of Combined Banking & Legal Mastery</span>
+                  <div className="inline-flex items-center gap-2.5 bg-blue-50 border border-blue-100 px-4 py-2 rounded-2xl text-brand-navy-700 text-sm font-extrabold shadow-sm">
+                    <Award className="w-5 h-5 text-brand-navy-600 shrink-0" />
+                    <span>9 Years of Ahmedabad's Best Banking & Legal Mastery</span>
                   </div>
 
-                  <h1 className="font-display text-4xl sm:text-5xl lg:text-5.5xl font-extrabold text-white tracking-tight leading-tight">
-                    Premium Financial Consulting & <span className="text-brand-gold-500 font-black">Legal Solutions</span> for Your Assets
+                  <h1 className="font-display text-3xl sm:text-4xl lg:text-5xl font-black text-brand-navy-950 tracking-tight leading-tight animate-fade-in">
+                    Premium Financial Consulting & <span className="text-brand-navy-600 font-extrabold">Doorstep Legal</span> Solutions
                   </h1>
 
-                  <p className="text-slate-300 text-base md:text-lg leading-relaxed max-w-2xl">
-                    With over nine combined years of major bank underwriting and active property document expertise, <span className="text-brand-gold-100 font-semibold">SR Finserv</span> bridges the gap between private bank sanctions and robust contract documentation.
+                  <p className="text-slate-600 text-lg md:text-xl leading-relaxed max-w-2xl font-semibold">
+                    With over nine years of bank loan department operations and document execution experience, <span className="text-brand-navy-600 font-black">SR Finserv</span> offers doorstep support for your legal contracts and home financing.
                   </p>
 
-                  <div className="flex flex-col sm:flex-row gap-4 pt-2">
+                  <div className="flex flex-col sm:flex-row gap-4.5 pt-2">
                     <button
                       onClick={() => { setActiveTab('inquire'); }}
-                      className="bg-brand-gold-500 hover:bg-brand-gold-600 font-semibold text-brand-navy-950 font-sans px-8 py-4 rounded-xl text-sm transition-all shadow-lg flex items-center justify-center gap-2"
+                      className="bg-brand-navy-600 hover:bg-brand-navy-800 font-extrabold text-white font-sans px-5.5 py-3 rounded-xl text-sm transition-all shadow-md flex items-center justify-center gap-2"
                     >
                       <span>Inquire Call Back</span>
-                      <ArrowRight className="w-4 h-4" />
+                      <ArrowRight className="w-4 h-4 animate-pulse" />
                     </button>
                     <button
-                      onClick={() => { setActiveTab('calculators'); }}
-                      className="bg-brand-navy-800/80 hover:bg-brand-navy-800 text-white font-semibold border border-brand-navy-700 font-sans px-8 py-4 rounded-xl text-sm transition-all flex items-center justify-center gap-2"
+                      onClick={() => { setActiveTab('about_us'); }}
+                      className="bg-white hover:bg-slate-50 text-slate-700 font-bold border border-slate-200 font-sans px-5.5 py-3 rounded-xl text-sm transition-all flex items-center justify-center gap-2 shadow-sm"
                     >
-                      <Percent className="w-4 h-4 text-brand-gold-500" />
-                      <span>Estimate Loan Limits</span>
+                      <UserCheck className="w-4 h-4 text-brand-navy-600" />
+                      <span>About Sanket Champaneri</span>
                     </button>
                   </div>
 
                   {/* Highlights Grid */}
-                  <div className="grid grid-cols-3 gap-4 pt-8 md:pt-12 border-t border-brand-navy-800 max-w-lg">
+                  <div className="grid grid-cols-3 gap-6 pt-10 md:pt-14 border-t border-slate-200 max-w-lg">
                     <div>
-                      <div className="text-2xl font-black font-display text-brand-gold-500">9 Yrs</div>
-                      <div className="text-slate-400 text-[11px] font-semibold uppercase mt-1">Combined Expertise</div>
+                      <div className="text-3xl font-black font-display text-brand-navy-600">9 Yrs</div>
+                      <div className="text-slate-500 text-xs font-bold uppercase mt-1">Combined Work</div>
                     </div>
                     <div>
-                      <div className="text-2xl font-black font-display text-white">₹15 Cr+</div>
-                      <div className="text-slate-400 text-[11px] font-semibold uppercase mt-1">Cumulative Facilitation</div>
+                      <div className="text-3xl font-black font-display text-brand-navy-950">₹15 Cr+</div>
+                      <div className="text-slate-500 text-xs font-bold uppercase mt-1">Facilitated</div>
                     </div>
                     <div>
-                      <div className="text-2xl font-black font-display text-brand-gold-300">100%</div>
-                      <div className="text-slate-400 text-[11px] font-semibold uppercase mt-1">Regulatory Compliant</div>
+                      <div className="text-3xl font-black font-display text-brand-navy-600">100%</div>
+                      <div className="text-slate-500 text-xs font-bold uppercase mt-1">Compliant Support</div>
                     </div>
                   </div>
                 </div>
 
                 {/* Right Frame Content - Interactive CTA Card */}
-                <div className="lg:col-span-5 bg-brand-navy-800/90 border border-brand-navy-700/80 p-6 md:p-8 rounded-3xl shadow-2xl relative">
-                  <div className="absolute top-3 right-3 text-[10px] bg-brand-gold-500/10 border border-brand-gold-500/20 text-brand-gold-300 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider">
+                <div className="lg:col-span-5 bg-slate-50 border border-slate-200 p-8 sm:p-9 rounded-3xl shadow-xs relative" id="inquiry-form-section">
+                  <div className="absolute top-4 right-4 text-xs bg-blue-50 border border-blue-100 text-brand-navy-600 px-3 py-1 rounded-md font-bold uppercase tracking-wider">
                     Fast response
                   </div>
 
-                  <h3 className="font-display font-bold text-lg text-white mb-3">Request Customized Eligibility Quotation</h3>
-                  <p className="text-xs text-slate-300 mb-6">Enter basic financial details. Founded by <strong>Sanket Bhavsar</strong>, we evaluate custom underwriting models tailored to your exact profile.</p>
+                  <h3 className="font-display font-black text-xl text-brand-navy-950 mb-3 ml-0">Customer Requirement Form</h3>
+                  <p className="text-sm text-slate-600 mb-6 font-semibold">Enter basic contact requirements. Founded by <strong>Sanket Champaneri</strong>, we evaluate underwritings tailored strictly to your profile at your doorstep.</p>
 
                   <form onSubmit={handleInquirySubmit} className="space-y-4">
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Full Name</label>
+                      <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Name</label>
                       <input
                         type="text"
                         required
-                        className="w-full text-xs px-3.5 py-3 rounded-xl bg-brand-navy-950 border border-slate-700 text-white focus:outline-none focus:border-brand-gold-500"
-                        placeholder="e.g. Sanket Bhavsar"
+                        className="w-full text-sm px-4 py-3.5 rounded-xl bg-white border border-slate-200 text-brand-navy-950 focus:outline-none focus:border-brand-navy-600 shadow-xs font-semibold"
+                        placeholder="e.g. Sanket Champaneri"
                         value={formData.fullName}
                         onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Phone (Aadhaar Linked)</label>
-                        <input
-                          type="tel"
-                          required
-                          className="w-full text-xs px-3.5 py-3 rounded-xl bg-brand-navy-950 border border-slate-700 text-white focus:outline-none"
-                          placeholder="+91..."
-                          value={formData.phone}
-                          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Support Track</label>
-                        <select
-                          className="w-full text-xs px-3.5 py-3 rounded-xl bg-brand-navy-950 border border-slate-700 text-white focus:outline-none"
-                          value={formData.leadType}
-                          onChange={(e) => {
-                            const val = e.target.value as LeadType;
-                            setFormData({
-                              ...formData,
-                              leadType: val,
-                              subType: val === 'loan' ? 'Home Loans' : val === 'legal' ? 'Title Search & Legal Opinion' : 'Term Life Insurance'
-                            });
-                          }}
-                        >
-                          <option value="loan">💸 Direct Loan</option>
-                          <option value="legal">⚖️ Property Legal</option>
-                          <option value="insurance">🛡️ Insurance Advisory</option>
-                        </select>
-                      </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Mo. Number</label>
+                      <input
+                        type="tel"
+                        required
+                        className="w-full text-sm px-4 py-3.5 rounded-xl bg-white border border-slate-200 text-brand-navy-950 focus:outline-none focus:border-brand-navy-600 shadow-xs font-semibold"
+                        placeholder="e.g. +91 84879 74404"
+                        value={formData.phone}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      />
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Service Particulars</label>
+                      <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Email id</label>
+                      <input
+                        type="email"
+                        required
+                        className="w-full text-sm px-4 py-3.5 rounded-xl bg-white border border-slate-200 text-brand-navy-950 focus:outline-none focus:border-brand-navy-600 shadow-xs font-semibold"
+                        placeholder="e.g. sanketbhavsar27@gmail.com"
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Requirement</label>
                       <select
-                        className="w-full text-xs px-3.5 py-3 rounded-xl bg-brand-navy-950 border border-slate-700 text-white focus:outline-none"
-                        value={formData.subType}
-                        onChange={(e) => setFormData({ ...formData, subType: e.target.value })}
+                        className="w-full text-sm px-4 py-3.5 rounded-xl bg-white border border-slate-200 text-brand-navy-950 focus:outline-none focus:border-brand-navy-600 shadow-xs font-semibold"
+                        value={formData.requirement}
+                        onChange={(e) => setFormData({ ...formData, requirement: e.target.value as any })}
                       >
-                        {formData.leadType === 'loan' && LOAN_SERVICES.map(s => <option key={s.id} value={s.title}>{s.title}</option>)}
-                        {formData.leadType === 'legal' && LEGAL_SERVICES.map(s => <option key={s.id} value={s.title}>{s.title}</option>)}
-                        {formData.leadType === 'insurance' && INSURANCE_SERVICES.map(s => <option key={s.id} value={s.title}>{s.title}</option>)}
+                        <option value="Loan services">Loan services</option>
+                        <option value="Insurance services">Insurance services</option>
+                        <option value="Legal services">Legal services</option>
                       </select>
                     </div>
 
                     <button
                       type="submit"
-                      className="w-full bg-brand-gold-500 hover:bg-brand-gold-600 text-brand-navy-950 font-bold text-xs py-3.5 rounded-xl transition-all shadow-md mt-6"
+                      className="w-full bg-brand-navy-600 hover:bg-brand-navy-800 text-white font-black text-sm py-4 rounded-xl transition-all shadow-md mt-6"
                     >
-                      Generate Free Advisory Callback
+                      Submit Customer Requirement
                     </button>
                   </form>
 
                   {formSubmitted && (
-                    <div className="mt-4 p-4 bg-green-500/10 border border-green-500/30 rounded-xl text-green-300 text-xs flex items-start gap-2.5">
-                      <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-xl text-green-950 text-sm flex items-start gap-2.5">
+                      <CheckCircle className="w-5 h-5 shrink-0 mt-0.5 text-green-600" />
                       <div>
-                        <p className="font-semibold">Inquiry logged successfully!</p>
-                        <p className="text-[11px] text-green-400 mt-1">We have logged your request. Switch to the `Advisor CRM` view in the header link to see your lead record instantly!</p>
+                        <p className="font-bold">Inquiry logged successfully!</p>
+                        <p className="text-xs text-green-800 mt-1">We have logged your request. Sanket Champaneri or our doorstep legal specialist will call you back within 2 hours.</p>
                       </div>
                     </div>
                   )}
@@ -1673,7 +1708,7 @@ export default function App() {
           <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24" id="services-section">
             <div className="text-center max-w-3xl mx-auto mb-16 space-y-3">
               <span className="text-xs uppercase tracking-widest font-extrabold text-brand-gold-600 block">Expertise Catalog</span>
-              <h2 className="font-display text-3xl md:text-4xl font-extrabold text-brand-navy-950">
+              <h2 className="font-display text-2xl md:text-3xl font-extrabold text-brand-navy-950">
                 Custom Solutions for Every Client Scenario
               </h2>
               <p className="text-sm text-slate-500">
@@ -1684,42 +1719,34 @@ export default function App() {
             {/* Split Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               
-              {/* Financial & Loan Advisory */}
+              {/* Financial Services */}
               <div className="space-y-6">
                 <div className="flex items-center gap-3 pb-4 border-b border-brand-navy-100">
                   <div className="p-3 bg-blue-50 text-blue-700 rounded-2xl border border-blue-100">
                     <Briefcase className="w-6 h-6" />
                   </div>
                   <div>
-                    <h3 className="font-display font-bold text-lg text-brand-navy-900">Financing Advisory</h3>
-                    <p className="text-[11px] text-slate-500">Direct partnerships with SBI, HDFC, ICICI, LIC-HFL, Axis & NBFCs</p>
+                    <h3 className="font-display font-bold text-lg text-brand-navy-900">Financial Services</h3>
+                    <p className="text-[11px] text-slate-500">Comprehensive lending partnerships with leading banks & NBFCs</p>
                   </div>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {LOAN_SERVICES.map((loan) => (
                     <div
                       key={loan.id}
-                      className="bg-white p-5 rounded-2xl border border-brand-navy-100 shadow-xs hover:shadow-md hover:border-brand-navy-200 transition-all flex flex-col justify-between min-h-[140px]"
+                      onClick={() => handlePrefillInquiry('loan', loan.title)}
+                      className="group cursor-pointer bg-white p-4.5 rounded-2xl border border-brand-navy-100 shadow-xs hover:shadow-md hover:border-brand-navy-300 transition-all flex items-center justify-between"
                     >
-                      <div className="space-y-2">
-                        <h4 className="font-bold text-sm text-brand-navy-950 font-display">{loan.title}</h4>
-                        <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">{loan.description}</p>
-                      </div>
-                      
-                      <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center text-xs">
-                        <div>
-                          <span className="text-slate-400 block text-[9px] font-bold uppercase">Rates from</span>
-                          <span className="font-mono font-bold text-brand-navy-800 text-[11px]">{loan.interestRateMin}</span>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-xs group-hover:scale-105 transition-transform">
+                          🏦
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedLoanService(loan)}
-                          className="text-[10px] font-bold text-brand-navy-600 hover:text-brand-navy-800"
-                        >
-                          Check Docs →
-                        </button>
+                        <span className="font-bold text-sm text-brand-navy-950 font-display group-hover:text-blue-600 transition-colors">{loan.title}</span>
                       </div>
+                      <span className="text-[10px] font-extrabold text-blue-600 uppercase tracking-wider bg-blue-50 px-2.5 py-1 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-all">
+                        Inquire
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -1732,35 +1759,32 @@ export default function App() {
                     <FileText className="w-6 h-6" />
                   </div>
                   <div>
-                    <h3 className="font-display font-bold text-lg text-brand-navy-900">Legal & Property Operations</h3>
+                    <h3 className="font-display font-bold text-lg text-brand-navy-900">Legal Services</h3>
                     <p className="text-[11px] text-slate-500">Registered drafts, title audits, and formal opinions</p>
                   </div>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {LEGAL_SERVICES.map((legal) => (
                     <div
                       key={legal.id}
-                      className="bg-white p-5 rounded-2xl border border-brand-navy-100 shadow-xs hover:shadow-md hover:border-brand-navy-200 transition-all flex flex-col justify-between min-h-[140px]"
+                      onClick={() => handlePrefillInquiry('legal', legal.title)}
+                      className="group cursor-pointer bg-white p-4.5 rounded-2xl border border-brand-navy-100 shadow-xs hover:shadow-md hover:border-brand-navy-300 transition-all flex items-center justify-between"
                     >
-                      <div className="space-y-2">
-                        <h4 className="font-bold text-sm text-brand-navy-950 font-display">{legal.title}</h4>
-                        <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">{legal.description}</p>
-                      </div>
-
-                      <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center text-xs">
-                        <div>
-                          <span className="text-slate-400 block text-[9px] font-bold uppercase">Timeline</span>
-                          <span className="font-semibold text-brand-navy-800 text-[11px]">{legal.estimatedTimeline}</span>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center font-bold text-xs group-hover:scale-105 transition-transform">
+                          {legal.id === 'sale-deed' && '📜'}
+                          {legal.id === 'rent-agreement' && '🏠'}
+                          {legal.id === 'agreement-to-sale' && '🤝'}
+                          {legal.id === 'power-of-attorney' && '✍️'}
+                          {legal.id === 'affidavit' && '📋'}
+                          {legal.id === 'notary-services' && '🖋️'}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedLegalService(legal)}
-                          className="text-[10px] font-bold text-purple-700 hover:text-purple-800"
-                        >
-                          Check Details →
-                        </button>
+                        <span className="font-bold text-sm text-brand-navy-950 font-display group-hover:text-purple-600 transition-colors">{legal.title}</span>
                       </div>
+                      <span className="text-[10px] font-extrabold text-purple-600 uppercase tracking-wider bg-purple-50 px-2.5 py-1 rounded-lg group-hover:bg-purple-600 group-hover:text-white transition-all">
+                        Inquire
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -1778,37 +1802,22 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {INSURANCE_SERVICES.map((ins) => (
                     <div
                       key={ins.id}
-                      className="bg-white p-5 rounded-2xl border border-brand-navy-100 shadow-xs hover:shadow-md hover:border-brand-navy-200 transition-all flex flex-col justify-between min-h-[140px]"
+                      onClick={() => handlePrefillInquiry('insurance', ins.title)}
+                      className="group cursor-pointer bg-white p-4.5 rounded-2xl border border-brand-navy-100 shadow-xs hover:shadow-md hover:border-brand-navy-300 transition-all flex items-center justify-between"
                     >
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <h4 className="font-bold text-sm text-brand-navy-950 font-display">{ins.title}</h4>
-                          <span className={`text-[8px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded ${
-                            ins.category === 'Life' ? 'bg-orange-50 text-orange-700' : 'bg-blue-50 text-blue-700'
-                          }`}>
-                            {ins.category}
-                          </span>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-xs group-hover:scale-105 transition-transform">
+                          {ins.id === 'general-insurance' ? '🛡️' : '❤️'}
                         </div>
-                        <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">{ins.description}</p>
+                        <span className="font-bold text-sm text-brand-navy-950 font-display group-hover:text-emerald-600 transition-colors">{ins.title}</span>
                       </div>
-
-                      <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center text-xs">
-                        <div>
-                          <span className="text-slate-400 block text-[9px] font-bold uppercase">Premium</span>
-                          <span className="font-semibold text-brand-navy-800 text-[11px]">{ins.premiumStart}</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedInsuranceService(ins)}
-                          className="text-[10px] font-bold text-emerald-700 hover:text-emerald-800"
-                        >
-                          Check Coverage →
-                        </button>
-                      </div>
+                      <span className="text-[10px] font-extrabold text-emerald-600 uppercase tracking-wider bg-emerald-50 px-2.5 py-1 rounded-lg group-hover:bg-emerald-600 group-hover:text-white transition-all">
+                        Inquire
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -1816,229 +1825,6 @@ export default function App() {
 
             </div>
           </section>
-
-          {/* DYNAMIC SERVICE CHECKLIST MODAL OR SLIDE IN (Conditionally Rendered inline for seamless UX) */}
-          {(selectedLoanService || selectedLegalService || selectedInsuranceService) && (
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-16">
-              <div className="bg-brand-navy-950 text-white rounded-3xl p-6 md:p-8 relative border border-brand-navy-800 shadow-2xl">
-                <button
-                  type="button"
-                  onClick={() => { setSelectedLoanService(null); setSelectedLegalService(null); setSelectedInsuranceService(null); }}
-                  className="absolute top-4 right-4 bg-white/10 hover:bg-white/25 rounded-full p-2 text-white transition-all focus:outline-none"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-
-                {selectedLoanService && (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div className="space-y-4">
-                      <span className="text-xs uppercase bg-brand-gold-500/20 text-brand-gold-300 font-bold px-3 py-1 rounded-full border border-brand-gold-500/20">
-                        Financial Document Checklist
-                      </span>
-                      <h3 className="font-display text-2.5xl font-black">{selectedLoanService.title}</h3>
-                      <p className="text-sm text-slate-300 leading-relaxed">{selectedLoanService.description}</p>
-                      
-                      <div className="grid grid-cols-3 gap-2 mt-4 text-xs">
-                        <div className="bg-white/5 p-3 rounded-xl border border-white/10">
-                          <span className="text-slate-400 block pb-1 border-b border-white/5 text-[10px] uppercase font-bold">Max Limit</span>
-                          <span className="font-extrabold text-[#fff] font-display text-[13px]">{selectedLoanService.maxAmount}</span>
-                        </div>
-                        <div className="bg-white/5 p-3 rounded-xl border border-white/10">
-                          <span className="text-slate-400 block pb-1 border-b border-white/5 text-[10px] uppercase font-bold">Interest Rate</span>
-                          <span className="font-mono text-brand-gold-400 font-bold block mt-1">{selectedLoanService.interestRateMin}</span>
-                        </div>
-                        <div className="bg-white/5 p-3 rounded-xl border border-white/10">
-                          <span className="text-slate-400 block pb-1 border-b border-white/5 text-[10px] uppercase font-bold">Max Tenure</span>
-                          <span className="font-extrabold text-[#fff] block mt-1">{selectedLoanService.tenureMax}</span>
-                        </div>
-                      </div>
-
-                      <div className="pt-4">
-                        <h5 className="text-xs font-bold uppercase text-brand-gold-300 tracking-wider mb-2">Key Service Premium Features:</h5>
-                        <ul className="text-xs text-slate-300 space-y-2">
-                          {selectedLoanService.features.map((f, i) => (
-                            <li key={i} className="flex items-start gap-2">
-                              <span className="text-green-400 shrink-0 mt-0.5">✓</span>
-                              <span>{f}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-
-                    <div className="bg-white/5 rounded-2xl p-5 border border-white/10">
-                      <h4 className="font-display font-extrabold text-sm text-white mb-4 flex items-center gap-2">
-                        <FileCheck className="w-4 h-4 text-brand-gold-500" />
-                        Documents Required for Bank Submission ({selectedLoanService.title})
-                      </h4>
-                      
-                      <div className="space-y-2.5">
-                        {selectedLoanService.documents.map((doc, idx) => (
-                          <div key={idx} className="flex items-center gap-3 bg-brand-navy-900/80 p-3 rounded-xl text-xs text-slate-200 border border-white/5">
-                            <span className="w-5 h-5 bg-brand-gold-500/10 border border-brand-gold-500/30 text-brand-gold-300 rounded-md flex items-center justify-center font-bold text-[10px]">
-                              {idx + 1}
-                            </span>
-                            <span>{doc}</span>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="mt-6 flex gap-3 text-xs">
-                        <button
-                          type="button"
-                          onClick={() => handlePrefillInquiry('loan', selectedLoanService.title)}
-                          className="flex-1 bg-brand-gold-500 hover:bg-brand-gold-600 text-brand-navy-950 font-bold py-3.5 rounded-xl transition-all shadow-md text-center"
-                        >
-                          Check Eligibility With This Product
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedLoanService(null)}
-                          className="px-4 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs transition-all"
-                        >
-                          Close Details
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {selectedLegalService && (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div className="space-y-4">
-                      <span className="text-xs uppercase bg-purple-500/20 text-purple-300 font-bold px-3 py-1 rounded-full border border-purple-500/20">
-                        Legal Consultation Checklist
-                      </span>
-                      <h3 className="font-display text-2.5xl font-black">{selectedLegalService.title}</h3>
-                      <p className="text-sm text-slate-300 leading-relaxed">{selectedLegalService.description}</p>
-                      
-                      <div className="bg-white/5 p-4 rounded-xl border border-white/10 space-y-1.5 mt-2">
-                        <span className="text-brand-gold-400 text-xs font-bold block uppercase tracking-wider">Crucial Pre-purchase Importance:</span>
-                        <p className="text-xs text-slate-300 leading-relaxed font-sans">{selectedLegalService.importance}</p>
-                      </div>
-
-                      <div className="pt-3">
-                        <span className="text-xs font-bold text-slate-300 block uppercase tracking-wider mb-2">Our Certified Drafting Process:</span>
-                        <div className="space-y-2">
-                          {selectedLegalService.processSteps.map((step, sIdx) => (
-                            <div key={sIdx} className="flex items-start gap-2.5 text-xs text-slate-300">
-                              <span className="text-purple-400 shrink-0 font-bold">{sIdx + 1}.</span>
-                              <span>{step}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-white/5 rounded-2xl p-5 border border-white/10">
-                      <h4 className="font-display font-extrabold text-sm text-white mb-4 flex items-center gap-2">
-                        <FileCheck className="w-4 h-4 text-purple-400" />
-                        Prerequisite Documents Needed from Client
-                      </h4>
-                      
-                      <div className="space-y-2.5">
-                        {selectedLegalService.documentsRequired.map((doc, idx) => (
-                          <div key={idx} className="flex items-center gap-3 bg-brand-navy-900/80 p-3 rounded-xl text-xs text-slate-200 border border-white/5">
-                            <span className="w-5 h-5 bg-purple-500/10 border border-purple-500/30 text-purple-300 rounded-md flex items-center justify-center font-bold text-[10px]">
-                              {idx + 1}
-                            </span>
-                            <span>{doc}</span>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="mt-6 flex gap-3 text-xs">
-                        <button
-                          type="button"
-                          onClick={() => handlePrefillInquiry('legal', selectedLegalService.title)}
-                          className="flex-1 bg-brand-gold-500 hover:bg-brand-gold-600 text-brand-navy-950 font-bold py-3.5 rounded-xl transition-all shadow-md text-center"
-                        >
-                          Draft and Request Custom Quote
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedLegalService(null)}
-                          className="px-4 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs transition-all"
-                        >
-                          Close Details
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {selectedInsuranceService && (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fadeIn">
-                    <div className="space-y-4">
-                      <span className="text-xs uppercase bg-emerald-500/20 text-emerald-300 font-bold px-3 py-1 rounded-full border border-emerald-500/20">
-                        🛡️ {selectedInsuranceService.category} Insurance Advisor Checklist
-                      </span>
-                      <h3 className="font-display text-2.5xl font-black">{selectedInsuranceService.title}</h3>
-                      <p className="text-sm text-slate-300 leading-relaxed">{selectedInsuranceService.description}</p>
-                      
-                      <div className="grid grid-cols-2 gap-3 mt-4 text-xs">
-                        <div className="bg-white/5 p-3 rounded-xl border border-white/10">
-                          <span className="text-slate-400 block pb-1 border-b border-white/5 text-[10px] uppercase font-bold">Max Cover Limit</span>
-                          <span className="font-extrabold text-[#fff] font-display text-[13px] block mt-1">{selectedInsuranceService.maxCoverage}</span>
-                        </div>
-                        <div className="bg-white/5 p-3 rounded-xl border border-white/10">
-                          <span className="text-slate-400 block pb-1 border-b border-white/5 text-[10px] uppercase font-bold">Premium Costs</span>
-                          <span className="font-mono text-brand-gold-400 font-bold block mt-1 text-[13px]">{selectedInsuranceService.premiumStart}</span>
-                        </div>
-                      </div>
-
-                      <div className="pt-4">
-                        <h5 className="text-xs font-bold uppercase text-brand-gold-300 tracking-wider mb-2">Key Coverage Features:</h5>
-                        <ul className="text-xs text-slate-300 space-y-2">
-                          {selectedInsuranceService.features.map((f, i) => (
-                            <li key={i} className="flex items-start gap-2">
-                              <span className="text-emerald-400 shrink-0 mt-0.5">✓</span>
-                              <span>{f}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-
-                    <div className="bg-white/5 rounded-2xl p-5 border border-white/10">
-                      <h4 className="font-display font-extrabold text-sm text-white mb-4 flex items-center gap-2">
-                        <FileCheck className="w-4 h-4 text-emerald-400" />
-                        Documents Required for Verification ({selectedInsuranceService.title})
-                      </h4>
-                      
-                      <div className="space-y-2.5">
-                        {selectedInsuranceService.documents.map((doc, idx) => (
-                          <div key={idx} className="flex items-center gap-3 bg-brand-navy-900/80 p-3 rounded-xl text-xs text-slate-200 border border-white/5">
-                            <span className="w-5 h-5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 rounded-md flex items-center justify-center font-bold text-[10px]">
-                              {idx + 1}
-                            </span>
-                            <span>{doc}</span>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="mt-6 flex gap-3 text-xs">
-                        <button
-                          type="button"
-                          onClick={() => handlePrefillInquiry('insurance', selectedInsuranceService.title)}
-                          className="flex-1 bg-brand-gold-500 hover:bg-brand-gold-600 text-brand-navy-950 font-bold py-3.5 rounded-xl transition-all shadow-md text-center"
-                        >
-                          Request Free Quote / Callback
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedInsuranceService(null)}
-                          className="px-4 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs transition-all"
-                        >
-                          Close Details
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
 
           {/* CLIENT TESTIMONIALS & REVIEWS SECTION */}
           <section className="py-16 md:py-20 bg-gradient-to-b from-white to-brand-navy-50/20 border-b border-brand-navy-100" id="testimonials-section">
@@ -2055,59 +1841,67 @@ export default function App() {
               </div>
 
               {/* Testimonials grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {testimonials.filter(t => t.status === 'Approved').map((item) => (
-                  <div
-                    key={item.id}
-                    className="bg-white p-6 rounded-3xl border border-brand-navy-100 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between relative group overflow-hidden"
-                  >
-                    <div className="absolute top-0 left-0 w-1 h-full bg-brand-gold-500" />
-                    
-                    <div className="space-y-4">
-                      {/* Star Rating */}
-                      <div className="flex gap-1">
-                        {Array.from({ length: item.rating }).map((_, i) => (
-                          <Star key={i} className="w-3.5 h-3.5 fill-brand-gold-500 text-brand-gold-500" />
-                        ))}
-                        {Array.from({ length: 5 - item.rating }).map((_, i) => (
-                          <Star key={i} className="w-3.5 h-3.5 text-slate-200" />
-                        ))}
+              {testimonials.filter(t => t.status === 'Approved').length === 0 ? (
+                <div className="text-center py-12 bg-white/70 rounded-3xl border border-dashed border-brand-navy-200 p-8 max-w-xl mx-auto shadow-sm">
+                  <p className="text-slate-500 text-sm font-medium">
+                    No verified reviews published yet. Be the first to share your experience using the client feedback desk below!
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {testimonials.filter(t => t.status === 'Approved').map((item) => (
+                    <div
+                      key={item.id}
+                      className="bg-white p-6 rounded-3xl border border-brand-navy-100 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between relative group overflow-hidden"
+                    >
+                      <div className="absolute top-0 left-0 w-1 h-full bg-brand-gold-500" />
+                      
+                      <div className="space-y-4">
+                        {/* Star Rating */}
+                        <div className="flex gap-1">
+                          {Array.from({ length: item.rating }).map((_, i) => (
+                            <Star key={i} className="w-3.5 h-3.5 fill-brand-gold-500 text-brand-gold-500" />
+                          ))}
+                          {Array.from({ length: 5 - item.rating }).map((_, i) => (
+                            <Star key={i} className="w-3.5 h-3.5 text-slate-200" />
+                          ))}
+                        </div>
+
+                        {/* Review message text */}
+                        <p className="text-slate-600 text-xs leading-relaxed italic font-sans">
+                          "{item.testimonialText}"
+                        </p>
                       </div>
 
-                      {/* Review message text */}
-                      <p className="text-slate-600 text-xs leading-relaxed italic font-sans">
-                        "{item.testimonialText}"
-                      </p>
-                    </div>
-
-                    <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
-                      <div>
-                        <span className="font-display font-extrabold text-brand-navy-950 text-xs block">
-                          {item.clientName}
-                        </span>
-                        <span className="text-[10px] text-brand-navy-500 block font-semibold mt-0.5">
-                          {item.serviceUsed}
+                      <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
+                        <div>
+                          <span className="font-display font-extrabold text-brand-navy-950 text-xs block">
+                            {item.clientName}
+                          </span>
+                          <span className="text-[10px] text-brand-navy-500 block font-semibold mt-0.5">
+                            {item.serviceUsed}
+                          </span>
+                        </div>
+                        <span className="text-[9px] font-mono text-slate-400">
+                          {new Date(item.createdAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
                         </span>
                       </div>
-                      <span className="text-[9px] font-mono text-slate-400">
-                        {new Date(item.createdAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
-                      </span>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
 
               {/* Feedbacks Submit segment */}
-              <div className="mt-16 max-w-3xl mx-auto bg-brand-navy-900 text-white rounded-3xl p-6 sm:p-10 relative overflow-hidden shadow-2xl border border-brand-navy-800">
-                <div className="absolute top-0 right-0 w-60 h-60 bg-brand-gold-500/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="mt-16 max-w-3xl mx-auto bg-white text-brand-navy-900 rounded-3xl p-6 sm:p-10 relative overflow-hidden shadow-xl border border-brand-navy-100">
+                <div className="absolute top-0 right-0 w-60 h-60 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
                 
                 <div className="relative z-10 space-y-6">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-brand-navy-800 pb-5">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-brand-navy-100 pb-5">
                     <div>
-                      <h3 className="font-display font-black text-lg text-white">Have we assisted your financial journey?</h3>
-                      <p className="text-xs text-slate-300 mt-1">Submit your testimonial block. Your experience helps hundreds of local property buyers.</p>
+                      <h3 className="font-display font-black text-lg text-brand-navy-900">Customer Satisfaction Ratings</h3>
+                      <p className="text-xs text-slate-500 mt-1 font-semibold">Submit your testimonial block. Your experience helps hundreds of local property buyers.</p>
                     </div>
-                    <span className="bg-brand-gold-500/10 border border-brand-gold-500/30 text-brand-gold-300 px-3 py-1.5 rounded-xl font-bold font-mono text-[9px] uppercase tracking-wider">
+                    <span className="bg-blue-50 border border-blue-200 text-brand-navy-700 px-3 py-1.5 rounded-xl font-bold font-mono text-[9px] uppercase tracking-wider">
                       Client Feedback Desk
                     </span>
                   </div>
@@ -2116,10 +1910,10 @@ export default function App() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {/* Name input */}
                       <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase tracking-widest font-bold text-slate-300 block">Your Name (Optional)</label>
+                        <label className="text-[10px] uppercase tracking-widest font-bold text-brand-navy-800 block">Your Name (Optional)</label>
                         <input
                           type="text"
-                          className="w-full text-xs px-3.5 py-3 rounded-xl bg-brand-navy-950 border border-slate-700 text-white focus:outline-none focus:border-brand-gold-500"
+                          className="w-full text-xs px-3.5 py-3 rounded-xl bg-slate-50 border border-slate-250 text-brand-navy-950 focus:bg-white focus:outline-none focus:border-brand-navy-600 font-semibold"
                           placeholder="Leave blank to submit anonymously"
                           value={newTestimonialName}
                           onChange={(e) => setNewTestimonialName(e.target.value)}
@@ -2128,16 +1922,17 @@ export default function App() {
 
                       {/* Dropdown list of services */}
                       <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase tracking-widest font-bold text-slate-300 block">Service Acquired</label>
+                        <label className="text-[10px] uppercase tracking-widest font-bold text-brand-navy-800 block">Service Acquired</label>
                         <select
-                          className="w-full text-xs px-3.5 py-3 rounded-xl bg-brand-navy-950 border border-slate-700 text-white focus:outline-none focus:border-brand-gold-500"
+                          className="w-full text-xs px-3.5 py-3 rounded-xl bg-slate-50 border border-slate-250 text-brand-navy-950 focus:bg-white focus:outline-none focus:border-brand-navy-600 font-semibold"
                           value={newTestimonialService}
                           onChange={(e) => setNewTestimonialService(e.target.value)}
                         >
-                          <option value="Home Loan Advisory">🏠 Home Loan Advisory</option>
-                          <option value="Business Loan Disbursement">💼 Business Loan Disbursement</option>
-                          <option value="Loan Against Property (LAP)">🏡 Loan Against Property (LAP)</option>
-                          <option value="Personal Loan Facilitation">💳 Personal Loan Facilitation</option>
+                          <option value="Home Loans">🏠 Home Loans</option>
+                          <option value="Business Loan">💼 Business Loan</option>
+                          <option value="Personal Loans">💳 Personal Loans</option>
+                          <option value="Project Loan">🏗️ Project Loan</option>
+                          <option value="Working Capital">⚙️ Working Capital</option>
                           <option value="30-Year Title Search & Legal Opinion">⚖️ 30-Year Title Search & Legal Opinion</option>
                           <option value="Sub-Registrar Slot & Registration support">✍️ Sub-Registrar Slot & Registration</option>
                         </select>
@@ -2147,7 +1942,7 @@ export default function App() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
                       {/* Star Rating select */}
                       <div className="space-y-1.5">
-                        <span className="text-[10px] uppercase tracking-rose font-bold text-slate-300 block">Rating score</span>
+                        <span className="text-[10px] uppercase tracking-rose font-bold text-brand-navy-800 block">Rating score</span>
                         <div className="flex gap-2.5 items-center">
                           {[1, 2, 3, 4, 5].map((stars) => (
                             <button
@@ -2156,23 +1951,23 @@ export default function App() {
                               onClick={() => setNewTestimonialRating(stars)}
                               className="focus:outline-none text-2xl transition-transform hover:scale-125"
                             >
-                              <span className={stars <= newTestimonialRating ? 'text-brand-gold-400' : 'text-slate-600'}>★</span>
+                              <span className={stars <= newTestimonialRating ? 'text-brand-gold-500' : 'text-slate-350'}>★</span>
                             </button>
                           ))}
-                          <span className="text-xs text-slate-400 font-bold ml-2">({newTestimonialRating}/5 Stars)</span>
+                          <span className="text-xs text-brand-navy-600 font-bold ml-2">({newTestimonialRating}/5 Stars)</span>
                         </div>
                       </div>
 
                       {/* Name display permission checkbox */}
-                      <div className="flex items-center gap-3 bg-brand-navy-950 p-3 rounded-xl border border-slate-800">
+                      <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
                         <input
                           id="newTestimonialPermission"
                           type="checkbox"
-                          className="w-4.5 h-4.5 accent-brand-gold-500 cursor-pointer rounded-md"
+                          className="w-4.5 h-4.5 accent-brand-navy-600 cursor-pointer rounded-md"
                           checked={newTestimonialPermission}
                           onChange={(e) => setNewTestimonialPermission(e.target.checked)}
                         />
-                        <label htmlFor="newTestimonialPermission" className="text-[11px] text-slate-300 cursor-pointer font-medium select-none">
+                        <label htmlFor="newTestimonialPermission" className="text-[11px] text-slate-600 cursor-pointer font-medium select-none">
                           I consent to display my name publicly with this review.
                         </label>
                       </div>
@@ -2180,11 +1975,11 @@ export default function App() {
 
                     {/* Testimonial message textbox */}
                     <div className="space-y-1.5">
-                      <label className="text-[10px] uppercase tracking-widest font-bold text-slate-300 block">Write Testimonial Statement</label>
+                      <label className="text-[10px] uppercase tracking-widest font-bold text-brand-navy-800 block">Write Testimonial Statement</label>
                       <textarea
                         rows={3}
                         required
-                        className="w-full text-xs p-3.5 rounded-xl bg-brand-navy-950 border border-slate-700 text-white focus:outline-none focus:border-brand-gold-500"
+                        className="w-full text-xs p-3.5 rounded-xl bg-slate-50 border border-slate-250 text-brand-navy-950 focus:bg-white focus:outline-none focus:border-brand-navy-600 font-semibold"
                         placeholder="Describe your satisfaction with Sanket's legal document reports or loan approvals speed..."
                         value={newTestimonialText}
                         onChange={(e) => setNewTestimonialText(e.target.value)}
@@ -2193,258 +1988,22 @@ export default function App() {
 
                     <button
                       type="submit"
-                      className="w-full bg-brand-gold-500 hover:bg-brand-gold-600 text-brand-navy-950 font-extrabold text-xs py-3.5 rounded-xl transition-all shadow-md mt-4"
+                      className="w-full bg-brand-navy-600 hover:bg-brand-navy-800 text-white font-extrabold text-xs py-3.5 rounded-xl transition-all shadow-md mt-4"
                     >
                       Publish Review Live
                     </button>
                   </form>
 
                   {testimonialSubmitted && (
-                    <div className="p-4 bg-green-500/15 border border-green-500/30 rounded-xl text-green-300 text-xs flex items-center gap-2.5">
-                      <CheckCircle className="w-4 h-4 shrink-0 text-green-400" />
+                    <div className="p-4 bg-green-50 border border-green-200 rounded-xl text-green-950 text-xs flex items-center gap-2.5">
+                      <CheckCircle className="w-4 h-4 shrink-0 text-green-600" />
                       <div>
                         <p className="font-bold">Testimonial added instantly!</p>
-                        <p className="text-[11px] text-green-400">Thank you. Your feedback is published live in our visual grid and stored locally.</p>
+                        <p className="text-[11px] text-green-800">Thank you. Your feedback is published live in our visual grid and stored locally.</p>
                       </div>
                     </div>
                   )}
                 </div>
-              </div>
-
-            </div>
-          </section>
-
-          {/* INTERACTIVE CALCULATOR SUITE */}
-          <section className="bg-brand-navy-50/50 py-16 md:py-24 border-y border-brand-navy-100" id="calculators-section">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              
-              <div className="text-center max-w-3xl mx-auto mb-12 space-y-3">
-                <span className="text-xs uppercase tracking-widest font-extrabold text-brand-gold-600 block">Financial Prudence</span>
-                <h2 className="font-display text-3xl md:text-4xl font-extrabold text-brand-navy-950">
-                  Plan Outflow & Borrowing Limits Side-by-Side
-                </h2>
-                <p className="text-sm text-slate-500 max-w-xl mx-auto">
-                  Compare prospective EMIs based on tenure interest weights, or inspect pre-underwriting approval margins prior to formal bank filings.
-                </p>
-              </div>
-
-              {/* Calculator grids */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                
-                {/* EMI Slider Card */}
-                <div className="lg:col-span-6">
-                  <EMICalculator />
-                </div>
-
-                {/* Eligibility Diagnostic */}
-                <div className="lg:col-span-6">
-                  <EligibilityChecker />
-                </div>
-
-              </div>
-            </div>
-          </section>
-
-          {/* DYNAMIC BACKEND INTERACTIVE ADVISORY INQUIRY FORM */}
-          <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-20" id="inquiry-form-section">
-            <div className="bg-white rounded-3xl shadow-xl border border-brand-navy-100 overflow-hidden grid grid-cols-1 md:grid-cols-12">
-              
-              {/* Form Sidebar Promo details */}
-              <div className="bg-brand-navy-900 text-white md:col-span-5 p-8 md:p-10 flex flex-col justify-between relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-40 h-40 bg-brand-gold-500/10 rounded-full blur-2xl" />
-                
-                <div className="space-y-6 relative z-10">
-                  <div className="w-10 h-10 bg-brand-gold-500/10 border border-brand-gold-500/30 rounded-xl flex items-center justify-center">
-                    <PhoneCall className="w-5 h-5 text-brand-gold-500" />
-                  </div>
-                  <div>
-                    <h3 className="font-display font-extrabold text-xl text-white">We Solve Tough Cases</h3>
-                    <p className="text-xs text-slate-300 mt-2 leading-relaxed">
-                      Lacking regular salary receipts? Experienced complex property inheritance documentation challenges? We handle title disputes and help self-employed workers with active MSME credentials clear files smoothly.
-                    </p>
-                  </div>
-
-                  <div className="space-y-3.5 pt-4 border-t border-brand-navy-800 text-xs">
-                    <div className="flex items-center gap-3">
-                      <span className="w-2 h-2 rounded-full bg-brand-gold-500" />
-                      <span>Free Eligibility Assessment</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="w-2 h-2 rounded-full bg-brand-gold-500" />
-                      <span>Within-2-Hours Return SLA Call</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="w-2 h-2 rounded-full bg-brand-gold-500" />
-                      <span>No Upfront Fees Assessed</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-10 border-t border-brand-navy-800 mt-8 space-y-3">
-                  <div>
-                    <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Direct Office Hotline</p>
-                    <a href="tel:+918487974404" className="text-sm font-bold text-white mt-1 flex items-center gap-2 hover:text-brand-gold-400 transition-colors">
-                      <Phone className="w-4 h-4 text-brand-gold-500 shrink-0" />
-                      <span>+91 84879 74404</span>
-                    </a>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Business Email</p>
-                    <a href="mailto:sanketbhavsar27@gmail.com" className="text-xs font-bold text-slate-200 mt-1 flex items-center gap-2 hover:text-brand-gold-400 transition-colors">
-                      <span className="text-sm shrink-0">✉️</span>
-                      <span>sanketbhavsar27@gmail.com</span>
-                    </a>
-                  </div>
-                </div>
-              </div>
-
-              {/* Form inputs side */}
-              <div className="md:col-span-7 p-8 md:p-10">
-                <h3 className="font-display font-extrabold text-2xl text-brand-navy-950 mb-2">Book Callback & Valuation Support</h3>
-                <p className="text-xs text-slate-500 mb-6">Complete this request. Our systems will index details immediately. You can view progress logs by toggling the `Advisor CRM` view in the top header.</p>
-
-                <form onSubmit={handleInquirySubmit} className="space-y-5">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-brand-navy-800">Your Full Name</label>
-                      <input
-                        type="text"
-                        required
-                        className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-navy-600"
-                        placeholder="John Doe"
-                        value={formData.fullName}
-                        onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-brand-navy-800">Phone Number</label>
-                      <input
-                        type="tel"
-                        required
-                        className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-navy-600"
-                        placeholder="+91..."
-                        value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-brand-navy-800">Email Address (Optional)</label>
-                      <input
-                        type="email"
-                        className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-navy-600"
-                        placeholder="john@example.com"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-brand-navy-800">Best Time for Counsel Call</label>
-                      <select
-                        className="w-full text-xs p-3.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-navy-600"
-                        value={formData.bestTimeToCall}
-                        onChange={(e) => setFormData({ ...formData, bestTimeToCall: e.target.value })}
-                      >
-                        <option value="Mornings 10 AM - 1 PM">Mornings 10 AM - 1 PM</option>
-                        <option value="Afternoons 1 PM - 4 PM">Afternoons 1 PM - 4 PM</option>
-                        <option value="Evenings 4 PM - 7 PM">Evenings 4 PM - 7 PM</option>
-                        <option value="Anytime of the Day">Anytime of the Day</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-brand-navy-800">Inquiry Channel</label>
-                      <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-bold gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setFormData({ ...formData, leadType: 'loan', subType: 'Home Loans' })}
-                          className={`flex-1 py-1.5 text-center rounded-lg transition-all ${formData.leadType === 'loan' ? 'bg-white text-brand-navy-850 shadow-xs' : 'text-slate-500 hover:text-slate-700'}`}
-                        >
-                          💸 Loan
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setFormData({ ...formData, leadType: 'legal', subType: 'Title Search & Legal Opinion' })}
-                          className={`flex-1 py-1.5 text-center rounded-lg transition-all ${formData.leadType === 'legal' ? 'bg-white text-brand-navy-850 shadow-xs' : 'text-slate-500 hover:text-slate-700'}`}
-                        >
-                          ⚖️ Legal
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setFormData({ ...formData, leadType: 'insurance', subType: 'Term Life Insurance' })}
-                          className={`flex-1 py-1.5 text-center rounded-lg transition-all ${formData.leadType === 'insurance' ? 'bg-white text-brand-navy-850 shadow-xs' : 'text-slate-500 hover:text-slate-700'}`}
-                        >
-                          🛡️ Insurance
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-brand-navy-800">Select Specific Category</label>
-                      <select
-                        className="w-full text-xs p-3.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-navy-600"
-                        value={formData.subType}
-                        onChange={(e) => setFormData({ ...formData, subType: e.target.value })}
-                      >
-                        {formData.leadType === 'loan' && LOAN_SERVICES.map(s => <option key={s.id} value={s.title}>{s.title}</option>)}
-                        {formData.leadType === 'legal' && LEGAL_SERVICES.map(s => <option key={s.id} value={s.title}>{s.title}</option>)}
-                        {formData.leadType === 'insurance' && INSURANCE_SERVICES.map(s => <option key={s.id} value={s.title}>{s.title}</option>)}
-                      </select>
-                    </div>
-                  </div>
-
-                  {formData.leadType === 'loan' && (
-                    <div className="space-y-2 pt-1">
-                      <div className="flex justify-between text-xs font-semibold">
-                        <span className="text-brand-navy-800">Target Loan Amount Budget</span>
-                        <span className="font-bold text-brand-navy-600">
-                          ₹{(formData.amount / 100000).toFixed(1)} Lakhs (₹{formData.amount.toLocaleString()})
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min="100000"
-                        max="15000000"
-                        step="50000"
-                        value={formData.amount}
-                        onChange={(e) => setFormData({ ...formData, amount: Number(e.target.value) })}
-                        className="w-full accent-brand-navy-600 h-1.5 bg-brand-navy-100 rounded-lg cursor-pointer animate-pulse"
-                      />
-                    </div>
-                  )}
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-brand-navy-800">Specific Requirements & Details</label>
-                    <textarea
-                      rows={3}
-                      className="w-full text-xs p-3.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-navy-600"
-                      placeholder="Explain your situation briefly (e.g. current credit score, property location, title mother-deed search timeline requirements)"
-                      value={formData.details}
-                      onChange={(e) => setFormData({ ...formData, details: e.target.value })}
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full bg-brand-navy-900 hover:bg-brand-navy-850 text-white font-bold text-xs py-3.5 rounded-xl transition-all shadow-md mt-4"
-                  >
-                    Register Request on Office Database
-                  </button>
-                </form>
-
-                {formSubmitted && (
-                  <div className="mt-4 p-4 bg-green-500/10 border border-green-500/30 rounded-xl text-green-700 text-xs flex items-start gap-2.5">
-                    <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-bold">Inquiry logged successfully!</p>
-                      <p className="text-[11px] text-slate-500 mt-1">We have logged your request. Switch to the `Advisor CRM` view in the header link to see your lead record instantly!</p>
-                    </div>
-                  </div>
-                )}
               </div>
 
             </div>
@@ -2497,72 +2056,135 @@ export default function App() {
       )}
 
       {/* FOOTER CONTACT ROW */}
-      <footer className="mt-auto bg-brand-navy-900 text-slate-300 border-t border-brand-navy-950 pt-16 pb-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12 pb-12 border-b border-brand-navy-800">
+      <footer className="mt-auto bg-slate-50 text-slate-600 border-t border-slate-200 pt-16 pb-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12 pb-12 border-b border-slate-200">
           
           <div className="md:col-span-4 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-brand-navy-950 rounded-lg flex items-center justify-center border border-brand-gold-500">
-                <span className="font-display font-black text-lg text-brand-gold-500">SR</span>
+              <div className="w-10 h-10 bg-brand-navy-600 rounded-lg flex items-center justify-center border border-slate-200">
+                <span className="font-display font-black text-lg text-white">SR</span>
               </div>
               <div>
-                <span className="font-display text-lg font-bold text-white block">SR Finserv</span>
-                <span className="text-[9px] uppercase tracking-wider font-bold text-brand-gold-500 block -mt-1">
+                <span className="font-display text-lg font-black text-brand-navy-950 block">SR Finserv</span>
+                <span className="text-[9px] uppercase tracking-wider font-extrabold text-brand-navy-600 block -mt-1">
                   Legal & Loans Advisory
                 </span>
               </div>
             </div>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Serving property developers, individual buyers, and aspiring business entrepreneurs in Ahmedabad with over nine combined years of major bank loan officer expertise and active legal solutions.
+            <p className="text-xs text-slate-500 leading-relaxed font-semibold">
+              Serving property developers, individual buyers, and aspiring business entrepreneurs in Ahmedabad with over nine combined years of major bank loan officer expertise and active doorstep legal solutions.
             </p>
           </div>
 
           <div className="md:col-span-4 space-y-4">
-            <h4 className="font-display font-bold text-sm text-white uppercase tracking-wider">Services Coverage</h4>
+            <h4 className="font-display font-black text-sm text-brand-navy-950 uppercase tracking-wider">Services Coverage</h4>
             <ul className="text-xs space-y-2.5">
-              <li><button onClick={() => { setActiveTab('services'); setIsCrmMode(false); }} className="hover:text-brand-gold-400 transition-colors">Residential Home Loans</button></li>
-              <li><button onClick={() => { setActiveTab('services'); setIsCrmMode(false); }} className="hover:text-brand-gold-400 transition-colors">Business & MSME Collateral-Free Loans</button></li>
-              <li><button onClick={() => { setActiveTab('services'); setIsCrmMode(false); }} className="hover:text-brand-gold-400 transition-colors">Mother Deed 30-Year Title Search Reports</button></li>
-              <li><button onClick={() => { setActiveTab('services'); setIsCrmMode(false); }} className="hover:text-brand-gold-400 transition-colors">Sub-Registrar Slot Booking Support</button></li>
+              <li>
+                <button
+                  onClick={() => {
+                    setActiveTab('services');
+                    setIsCrmMode(false);
+                    setTimeout(() => {
+                      const el = document.getElementById('services-section');
+                      if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    }, 100);
+                  }}
+                  className="hover:text-brand-navy-600 transition-colors text-left font-semibold"
+                >
+                  Residential Home Loans (Starting @ 7.20%)
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => {
+                    setActiveTab('services');
+                    setIsCrmMode(false);
+                    setTimeout(() => {
+                      const el = document.getElementById('services-section');
+                      if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    }, 100);
+                  }}
+                  className="hover:text-brand-navy-600 transition-colors text-left font-semibold"
+                >
+                  Mortgage Loans / LAP (Starting @ 8.70%)
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => {
+                    setActiveTab('services');
+                    setIsCrmMode(false);
+                    setTimeout(() => {
+                      const el = document.getElementById('services-section');
+                      if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    }, 100);
+                  }}
+                  className="hover:text-brand-navy-600 transition-colors text-left font-semibold"
+                >
+                  Mother Deed 30-Year Title Search Reports
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => {
+                    setActiveTab('services');
+                    setIsCrmMode(false);
+                    setTimeout(() => {
+                      const el = document.getElementById('services-section');
+                      if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    }, 100);
+                  }}
+                  className="hover:text-brand-navy-600 transition-colors text-left font-semibold"
+                >
+                  Sub-Registrar Slot Booking Support
+                </button>
+              </li>
             </ul>
           </div>
 
           <div className="md:col-span-4 space-y-4">
-            <h4 className="font-display font-bold text-sm text-white uppercase tracking-wider">Direct Business Support</h4>
-            <div className="space-y-2.5 text-xs">
-              <div className="flex items-start gap-2">
-                <span className="text-slate-400 shrink-0">📍</span>
-                <span className="text-slate-300 leading-normal">
+            <h4 className="font-display font-black text-sm text-brand-navy-950 uppercase tracking-wider">Direct Business Support</h4>
+            <div className="space-y-3 pt-1 text-sm font-semibold text-slate-600">
+              <div className="flex items-start gap-2.5">
+                <span className="text-slate-500 shrink-0 mt-0.5">📍</span>
+                <span className="text-slate-600 leading-relaxed font-semibold">
                   87, Venus Alfa Market, Venus Atlantis, Near Shell Petrol Pump, Prahladnagar, Ahmedabad - 380015
                 </span>
               </div>
-              <div className="flex items-start gap-2">
-                <span className="text-slate-400 shrink-0">📞</span>
-                <a href="tel:+918487974404" className="text-brand-gold-300 font-bold font-mono hover:underline">
+              <div className="flex items-start gap-2.5">
+                <span className="text-slate-500 shrink-0">📞</span>
+                <a href="tel:+918487974404" className="text-brand-navy-600 font-extrabold hover:underline">
                   +91 84879 74404
                 </a>
               </div>
-              <div className="flex items-start gap-2">
-                <span className="text-slate-400 shrink-0">✉️</span>
-                <a href="mailto:sanketbhavsar27@gmail.com" className="text-brand-gold-300 font-bold font-mono hover:underline">
+              <div className="flex items-start gap-2.5">
+                <span className="text-slate-500 shrink-0">✉️</span>
+                <a href="mailto:sanketbhavsar27@gmail.com" className="text-brand-navy-600 font-extrabold hover:underline">
                   sanketbhavsar27@gmail.com
                 </a>
               </div>
-              <div className="flex items-start gap-2">
-                <span className="text-slate-400 shrink-0">⚡</span>
-                <span className="text-slate-300">Callback Answer SLA: 2 Hours Guaranteed</span>
+              <div className="flex items-start gap-2.5">
+                <span className="text-slate-500 shrink-0 mt-0.5">📸</span>
+                <a href="https://www.instagram.com/SR_Finserv/" target="_blank" rel="noopener noreferrer" className="text-pink-600 font-extrabold hover:underline flex items-center gap-1.5">
+                  <Instagram className="w-3.5 h-3.5" />
+                  @SR_Finserv
+                </a>
+              </div>
+              <div className="flex items-start gap-2.5 bg-white border border-slate-200 px-3.5 py-2.5 rounded-xl shadow-xs">
+                <span className="text-slate-600 shrink-0">⚡</span>
+                <span className="text-brand-navy-700 font-bold">Callback SLA: 2 Hours Guaranteed Call Back</span>
               </div>
             </div>
           </div>
 
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-slate-400">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-slate-500 font-semibold">
           <div>
             &copy; {new Date().getFullYear()} SR Finserv. All Rights Reserved.
           </div>
-          <div className="flex gap-4 font-mono text-[10px]">
-            <span>Founded by Sanket Bhavsar</span>
+          <div className="flex gap-4 font-mono text-[10px] text-slate-400">
+            <span>Founded by Sanket Champaneri</span>
             <span>•</span>
             <span>Secure SSL Encrypted</span>
           </div>
@@ -2580,7 +2202,7 @@ export default function App() {
       >
         {/* Hover tooltips */}
         <div className="bg-slate-900/90 text-white text-[11px] font-sans px-3 py-1.5 rounded-lg shadow-md border border-slate-700 opacity-0 transform translate-y-2 group-hover/fab:opacity-100 group-hover/fab:translate-y-0 transition-all duration-300 pointer-events-auto select-none mr-1 flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#25D366] animate-ping" />
+          <span className="w-1.5 h-1.5 rounded-full bg-[#0ea5e9] animate-ping" />
           <span>Sanket is Online</span>
         </div>
 
@@ -2590,16 +2212,16 @@ export default function App() {
           target="_blank"
           referrerPolicy="no-referrer"
           rel="noopener noreferrer"
-          className="group pointer-events-auto flex items-center gap-2.5 bg-[#25D366] hover:bg-[#20ba5a] text-white p-3.5 sm:px-4 sm:py-3.5 rounded-full shadow-[0_12px_36px_rgba(37,211,102,0.4)] hover:shadow-[0_16px_40px_rgba(37,211,102,0.6)] transform hover:-translate-y-1 hover:scale-105 active:scale-95 transition-all duration-300 md:w-auto"
-          title="Chat with Sanket Bhavsar on WhatsApp"
+          className="group pointer-events-auto flex items-center gap-2.5 bg-[#0ea5e9] hover:bg-[#0284c7] text-white p-3.5 sm:px-4 sm:py-3.5 rounded-full shadow-[0_12px_36px_rgba(14,165,233,0.4)] hover:shadow-[0_16px_40px_rgba(14,165,233,0.6)] transform hover:-translate-y-1 hover:scale-105 active:scale-95 transition-all duration-300 md:w-auto"
+          title="Chat with Sanket Champaneri on WhatsApp"
         >
           {/* Pulsing state ring */}
-          <span className="absolute inset-0 rounded-full border-2 border-[#25D366] animate-ping opacity-25" />
+          <span className="absolute inset-0 rounded-full border-2 border-[#0ea5e9] animate-ping opacity-25" />
           
-          <MessageCircle className="w-6 h-6 shrink-0 fill-white text-[#25D366] group-hover:rotate-12 transition-transform duration-300" />
+          <MessageCircle className="w-6 h-6 shrink-0 fill-white text-[#0ea5e9] group-hover:rotate-12 transition-transform duration-300" />
           
           <div className="hidden sm:flex flex-col items-start leading-none pr-1">
-            <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-100 leading-none">Instant Support</span>
+            <span className="text-[10px] uppercase font-bold tracking-widest text-sky-100 leading-none">Instant Support</span>
             <span className="text-xs font-extrabold text-white mt-0.5 font-sans">Chat on WhatsApp</span>
           </div>
 
