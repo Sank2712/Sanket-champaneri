@@ -31,7 +31,8 @@ import {
   MessageSquare,
   MessageCircle,
   Globe,
-  Instagram
+  Instagram,
+  Bell
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { LOAN_SERVICES, LEGAL_SERVICES, INSURANCE_SERVICES, INITIAL_LEADS, FAQS, INITIAL_TESTIMONIALS } from './data';
@@ -280,6 +281,54 @@ export default function App() {
   const [selectedLeadForEdit, setSelectedLeadForEdit] = useState<InquiryLead | null>(null);
   const [leadNotesEdit, setLeadNotesEdit] = useState<string>('');
   const [leadStatusEdit, setLeadStatusEdit] = useState<InquiryLead['status']>('New');
+
+  // Call Back Reminders System
+  const [callReminders, setCallReminders] = useState<any[]>(() => {
+    const saved = localStorage.getItem('sr_finserv_call_reminders');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('sr_finserv_call_reminders', JSON.stringify(callReminders));
+  }, [callReminders]);
+
+  useEffect(() => {
+    const checkInterval = setInterval(() => {
+      const now = Date.now();
+      let hasChange = false;
+      
+      const updated = callReminders.map(rem => {
+        if (!rem.triggered && now >= new Date(rem.scheduledAt).getTime()) {
+          // Check if the original lead is still 'New'
+          const matchingLead = leads.find(l => l.id === rem.leadId);
+          if (matchingLead && matchingLead.status === 'New') {
+            triggerNotification(
+              '☎️ Call Back Reminder Triggered!',
+              `Reminder: Call ${rem.fullName} ASAP at ${rem.phone} for ${rem.subType}. Status is still 'New'.`,
+              'warning',
+              false
+            );
+          }
+          hasChange = true;
+          return { ...rem, triggered: true };
+        }
+        return rem;
+      });
+
+      if (hasChange) {
+        setCallReminders(updated);
+      }
+    }, 4000); // Check every 4s
+
+    return () => clearInterval(checkInterval);
+  }, [callReminders, leads]);
 
   // Submit Inquiry Form State
   const [formData, setFormData] = useState({
@@ -846,6 +895,126 @@ export default function App() {
                           <option value="Completed">🟢 State: Sanctioned & Disbursed</option>
                           <option value="Closed">⚪ State: Rejected / Closed</option>
                         </select>
+                      </div>
+
+                      {/* Remind Me to Call Integration */}
+                      <div className="bg-slate-50 p-4.5 rounded-2xl border border-slate-100 space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] font-bold tracking-wider text-slate-500 uppercase flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-brand-navy-600" />
+                            <span>Call Follow-up Reminder</span>
+                          </span>
+                          <span className="text-[9px] font-bold text-slate-400 bg-slate-200/60 px-1.5 py-0.5 rounded-md">Status-Gate</span>
+                        </div>
+                        
+                        {(() => {
+                          const activeReminder = callReminders.find(r => r.leadId === selectedLeadForEdit.id && !r.triggered);
+                          if (activeReminder) {
+                            return (
+                              <div className="space-y-2">
+                                <div className="bg-amber-50/70 border border-amber-200/60 rounded-xl p-3 text-[11px] text-amber-900 space-y-1">
+                                  <div className="flex items-center gap-2 font-black text-amber-800">
+                                    <Bell className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
+                                    <span>24-Hour Reminder Active</span>
+                                  </div>
+                                  <p className="text-[10px] text-amber-700">Scheduled: {new Date(activeReminder.scheduledAt).toLocaleString()}</p>
+                                  <p className="text-[9px] text-amber-600 italic">Will notify Sanket ONLY if client status remains <strong>'New'</strong>.</p>
+                                </div>
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setCallReminders(prev => prev.filter(r => r.id !== activeReminder.id));
+                                      triggerNotification('Reminder Cleared', `Call reminder for ${selectedLeadForEdit.fullName} removed.`, 'info', false);
+                                    }}
+                                    className="flex-1 text-[10px] bg-white border border-slate-250 hover:bg-slate-50 font-bold py-2 rounded-lg text-slate-600 transition-all"
+                                  >
+                                    Cancel Reminder
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      // Trigger immediately
+                                      setCallReminders(prev => prev.map(r => r.id === activeReminder.id ? { ...r, scheduledAt: new Date(Date.now() - 1000).toISOString() } : r));
+                                    }}
+                                    className="flex-1 text-[10px] bg-brand-gold-500 hover:bg-brand-gold-400 text-brand-navy-950 font-bold py-2 rounded-lg transition-all"
+                                  >
+                                    ⚡ Trigger Now
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          } else {
+                            const isCurrentlyNew = selectedLeadForEdit.status === 'New';
+                            return (
+                              <div className="space-y-2">
+                                <p className="text-[11px] text-slate-500 leading-tight">
+                                  Adds an automated visual alert after 24 hours if the lead status is still <strong>'New'</strong>.
+                                </p>
+                                {!isCurrentlyNew && (
+                                  <p className="text-[9px] text-amber-600 font-semibold bg-amber-50 p-1.5 rounded-lg border border-amber-100">
+                                    ⚠️ Note: Client status is currently '{selectedLeadForEdit.status}'. Set back to 'New' when scheduling if needed.
+                                  </p>
+                                )}
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const scheduledTime = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+                                      const newReminder = {
+                                        id: `rem-${selectedLeadForEdit.id}-${Date.now()}`,
+                                        leadId: selectedLeadForEdit.id,
+                                        fullName: selectedLeadForEdit.fullName,
+                                        phone: selectedLeadForEdit.phone,
+                                        subType: selectedLeadForEdit.subType,
+                                        scheduledAt: scheduledTime,
+                                        triggered: false
+                                      };
+                                      setCallReminders(prev => [...prev, newReminder]);
+                                      triggerNotification(
+                                        '⏱️ Reminder Set (24h)',
+                                        `Sanket will be reminded to call ${selectedLeadForEdit.fullName} at ${selectedLeadForEdit.phone} in 24 hours.`,
+                                        'success',
+                                        false
+                                      );
+                                    }}
+                                    className="flex-1 bg-brand-navy-50 hover:bg-brand-navy-100 text-brand-navy-800 font-bold text-[10px] py-2 px-2.5 rounded-xl border border-brand-navy-100 transition-all flex items-center justify-center gap-1.5"
+                                  >
+                                    <Bell className="w-3.5 h-3.5 text-brand-navy-600 shrink-0" />
+                                    <span>Remind to Call (24h)</span>
+                                  </button>
+                                  
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const scheduledTime = new Date(Date.now() + 15 * 1000).toISOString(); // 15 seconds
+                                      const newReminder = {
+                                        id: `rem-${selectedLeadForEdit.id}-${Date.now()}`,
+                                        leadId: selectedLeadForEdit.id,
+                                        fullName: selectedLeadForEdit.fullName,
+                                        phone: selectedLeadForEdit.phone,
+                                        subType: selectedLeadForEdit.subType,
+                                        scheduledAt: scheduledTime,
+                                        triggered: false
+                                      };
+                                      setCallReminders(prev => [...prev, newReminder]);
+                                      triggerNotification(
+                                        '🚀 Test Reminder Scheduled',
+                                        `Validation alert scheduled in 15 seconds for ${selectedLeadForEdit.fullName}! Keep the status as 'New' to verify.`,
+                                        'info',
+                                        false
+                                      );
+                                    }}
+                                    className="bg-brand-gold-100/60 hover:bg-brand-gold-500 hover:text-brand-navy-950 text-brand-gold-900 border border-brand-gold-250 font-bold text-[10px] py-2 px-3 rounded-xl transition-all"
+                                    title="Trigger in 15s for visual validation"
+                                  >
+                                    ⚡ Test 15s
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          }
+                        })()}
                       </div>
 
                       <div className="space-y-2">
@@ -2225,13 +2394,27 @@ export default function App() {
                           value={newTestimonialService}
                           onChange={(e) => setNewTestimonialService(e.target.value)}
                         >
-                          <option value="Home Loans">🏠 Home Loans</option>
-                          <option value="Business Loan">💼 Business Loan</option>
-                          <option value="Personal Loans">💳 Personal Loans</option>
-                          <option value="Project Loan">🏗️ Project Loan</option>
-                          <option value="Working Capital">⚙️ Working Capital</option>
-                          <option value="30-Year Title Search & Legal Opinion">⚖️ 30-Year Title Search & Legal Opinion</option>
-                          <option value="Sub-Registrar Slot & Registration support">✍️ Sub-Registrar Slot & Registration</option>
+                          <optgroup label="💼 LOANS DEPARTMENT">
+                            <option value="Home Loans">🏠 Home Loans</option>
+                            <option value="Business Loan">💼 Business Loan</option>
+                            <option value="Personal Loans">💳 Personal Loans</option>
+                            <option value="Project Loan">🏗️ Project Loan</option>
+                            <option value="Working Capital">⚙️ Working Capital Limit</option>
+                          </optgroup>
+                          
+                          <optgroup label="🛡️ INSURANCE DEPARTMENT">
+                            <option value="General Insurance">🚗 General Asset & Commercial Insurance</option>
+                            <option value="Life Insurance">❤️ Term & Mortgage Life Insurance</option>
+                          </optgroup>
+
+                          <optgroup label="⚖️ LEGAL DEPARTMENT">
+                            <option value="Sale Deed">📜 Sale Deed Drafting & Execution</option>
+                            <option value="Rent Agreement">🤝 Rent & Lease Agreement Drafting</option>
+                            <option value="Agreement to Sale">📝 Agreement to Sale Preparation</option>
+                            <option value="Power of Attorney">👤 Power of Attorney (GPA/SPA)</option>
+                            <option value="Affidavit">🖋️ Sworn Affidavit & Self-Declaration</option>
+                            <option value="Notary Services">🏛️ Doorstep Notary Public Services</option>
+                          </optgroup>
                         </select>
                       </div>
                     </div>

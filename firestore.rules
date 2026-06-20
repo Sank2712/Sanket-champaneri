@@ -6,17 +6,14 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // global helpers
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
     match /leads/{leadId} {
-      allow read, create, update, delete: if isValidId(leadId);
+      allow read: if true;
+      allow write: if leadId is string && leadId.size() <= 128;
     }
 
     match /testimonials/{testimonialId} {
-      allow read, create, update, delete: if isValidId(testimonialId);
+      allow read: if true;
+      allow write: if testimonialId is string && testimonialId.size() <= 128;
     }
   }
 }
