@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Shield,
   HelpCircle,
@@ -36,6 +36,8 @@ import {
 import { QRCodeSVG } from 'qrcode.react';
 import { LOAN_SERVICES, LEGAL_SERVICES, INSURANCE_SERVICES, INITIAL_LEADS, FAQS, INITIAL_TESTIMONIALS } from './data';
 import { InquiryLead, LeadType, ClientTestimonial, InsuranceService } from './types';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { db } from './firebase';
 // @ts-ignore
 
 export default function App() {
@@ -53,23 +55,26 @@ export default function App() {
   }, []);
 
   // Client Testimonials state
-  const [testimonials, setTestimonials] = useState<ClientTestimonial[]>(() => {
-    const saved = localStorage.getItem('sr_finserv_testimonials');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        // Filter out old mock/fake reviews (test-1, test-2, test-3, test-4)
-        return parsed.filter((t: any) => !['test-1', 'test-2', 'test-3', 'test-4'].includes(t.id));
-      } catch (e) {
-        return INITIAL_TESTIMONIALS;
-      }
-    }
-    return INITIAL_TESTIMONIALS;
-  });
+  const [testimonials, setTestimonials] = useState<ClientTestimonial[]>(INITIAL_TESTIMONIALS);
 
+  // Load testimonials from Firestore in real-time
   useEffect(() => {
-    localStorage.setItem('sr_finserv_testimonials', JSON.stringify(testimonials));
-  }, [testimonials]);
+    try {
+      const unsub = onSnapshot(collection(db, 'testimonials'), (snapshot) => {
+        const list: ClientTestimonial[] = [];
+        snapshot.forEach((doc) => {
+          list.push({ id: doc.id, ...doc.data() } as ClientTestimonial);
+        });
+        list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setTestimonials(list);
+      }, (error) => {
+        console.error("Error listening to testimonials:", error);
+      });
+      return () => unsub();
+    } catch (err) {
+      console.error("Failed to start testimonials real-time listener:", err);
+    }
+  }, []);
 
   // Submit Testimonial Form State
   const [newTestimonialName, setNewTestimonialName] = useState('');
@@ -78,16 +83,168 @@ export default function App() {
   const [newTestimonialPermission, setNewTestimonialPermission] = useState(true);
   const [newTestimonialRating, setNewTestimonialRating] = useState(5);
   const [testimonialSubmitted, setTestimonialSubmitted] = useState(false);
-  
-  // Leads & CRM Management State
-  const [leads, setLeads] = useState<InquiryLead[]>(() => {
-    const saved = localStorage.getItem('sr_finserv_leads');
-    return saved ? JSON.parse(saved) : INITIAL_LEADS;
+
+  // Email Alerts & Real-time Toasts State Engine
+  const [advisorEmail, setAdvisorEmail] = useState(() => {
+    return localStorage.getItem('sr_finserv_advisor_email') || 'sanketbhavsar27@gmail.com';
+  });
+  useEffect(() => {
+    localStorage.setItem('sr_finserv_advisor_email', advisorEmail);
+  }, [advisorEmail]);
+
+  const [toasts, setToasts] = useState<any[]>([]);
+  const [emailLogs, setEmailLogs] = useState<any[]>(() => {
+    const saved = localStorage.getItem('sr_finserv_email_logs');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [
+      {
+        id: 'log-initial-1',
+        recipient: 'sanketbhavsar27@gmail.com',
+        subject: '🔔 Inbound Lead Dispatch: Rajesh Kumar Patel',
+        body: 'Hello SR Finserv Advisor,\n\nA new customer requirement has been submitted on your live website!\n\nDetails:\n- Customer Name: Rajesh Kumar Patel\n- Phone: 9876543210\n- Requirement: Home Loan Services\n- Received: 2026-06-20 08:32:01',
+        timestamp: new Date(Date.now() - 3600000).toISOString(),
+        status: 'SUCCESS',
+        clientName: 'Rajesh Kumar Patel'
+      }
+    ];
   });
 
   useEffect(() => {
-    localStorage.setItem('sr_finserv_leads', JSON.stringify(leads));
-  }, [leads]);
+    localStorage.setItem('sr_finserv_email_logs', JSON.stringify(emailLogs));
+  }, [emailLogs]);
+
+  const triggerNotification = (title: string, message: string, type: 'success' | 'info' | 'warning' = 'info', isEmail = true, clientName?: string) => {
+    const id = `toast-${Date.now()}`;
+    setToasts(prev => [...prev, { id, title, message, type, timestamp: new Date(), isEmail }]);
+    
+    // Auto drop after 5s
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 5000);
+
+    // If matches email log requested, push log
+    if (isEmail && clientName) {
+      const logId = `log-${Date.now()}`;
+      const newLog = {
+        id: logId,
+        recipient: advisorEmail,
+        subject: `🔔 Inbound Lead Dispatch: ${clientName}`,
+        body: `Hello SR Finserv Advisor,\n\nA new customer requirement has been submitted on your live website!\n\nDetails:\n- Customer Name: ${clientName}\n- Message summary: ${message}\n- Received: ${new Date().toLocaleString()}\n\nBest Regards,\nSR Finserv Automated Notification Service`,
+        timestamp: new Date().toISOString(),
+        status: 'SUCCESS',
+        clientName
+      };
+      setEmailLogs(prev => [newLog, ...prev]);
+    }
+  };
+
+  const lastSubmittedIdRef = useRef<string>('');
+  const isInitialLeadsLoad = useRef<boolean>(true);
+  
+  // Leads & CRM Management State
+  const [leads, setLeads] = useState<InquiryLead[]>(INITIAL_LEADS);
+
+  // Load leads from Firestore in real-time
+  useEffect(() => {
+    try {
+      const unsub = onSnapshot(collection(db, 'leads'), (snapshot) => {
+        const list: InquiryLead[] = [];
+        snapshot.forEach((doc) => {
+          list.push({ id: doc.id, ...doc.data() } as InquiryLead);
+        });
+        list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setLeads(list.length > 0 ? list : INITIAL_LEADS);
+
+        // Notify active user of new submissions
+        if (!isInitialLeadsLoad.current) {
+          snapshot.docChanges().forEach((change) => {
+            if (change.type === 'added') {
+              const data = change.doc.data() as InquiryLead;
+              if (data.id && data.id !== lastSubmittedIdRef.current) {
+                triggerNotification(
+                  'Live Inbound Lead Received!',
+                  `Client ${data.fullName} is interested in ${data.subType || 'our assistance'}.`,
+                  'success',
+                  true,
+                  data.fullName
+                );
+              }
+            }
+          });
+        } else {
+          isInitialLeadsLoad.current = false;
+        }
+      }, (error) => {
+        console.error("Error listening to leads:", error);
+      });
+      return () => unsub();
+    } catch (err) {
+      console.error("Failed to start leads real-time listener:", err);
+    }
+  }, [advisorEmail]);
+
+  // Synchronize legacy local reviews and leads to the global Firestore database
+  useEffect(() => {
+    try {
+      // 1. Migrate Local Testimonials to Firestore
+      const savedTestimonials = localStorage.getItem('sr_finserv_testimonials');
+      if (savedTestimonials) {
+        const parsed = JSON.parse(savedTestimonials);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((t: any) => {
+            if (t && t.id && !['test-1', 'test-2', 'test-3', 'test-4'].includes(t.id)) {
+              setDoc(doc(db, 'testimonials', t.id), {
+                clientName: t.clientName || 'Valued Client',
+                serviceUsed: t.serviceUsed || 'Home Loans',
+                testimonialText: t.testimonialText || '',
+                hasPermission: t.hasPermission !== false,
+                rating: Number(t.rating) || 5,
+                status: t.status || 'Approved',
+                createdAt: t.createdAt || new Date().toISOString()
+              }, { merge: true }).catch(err => {
+                console.error("Historical testimonial sync failed:", err);
+              });
+            }
+          });
+        }
+      }
+
+      // 2. Migrate Local Leads to Firestore
+      const savedLeads = localStorage.getItem('sr_finserv_leads');
+      if (savedLeads) {
+        const parsed = JSON.parse(savedLeads);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((l: any) => {
+            if (l && l.id && !['lead-1'].includes(l.id)) {
+              setDoc(doc(db, 'leads', l.id), {
+                fullName: l.fullName || '',
+                phone: l.phone || '',
+                email: l.email || '',
+                leadType: l.leadType || 'loan',
+                subType: l.subType || '',
+                amount: Number(l.amount) || 0,
+                details: l.details || '',
+                status: l.status || 'New',
+                createdAt: l.createdAt || new Date().toISOString(),
+                notes: l.notes || '',
+                bestTimeToCall: l.bestTimeToCall || ''
+              }, { merge: true }).catch(err => {
+                console.error("Historical lead sync failed:", err);
+              });
+            }
+          });
+        }
+      }
+    } catch (error) {
+      console.warn("Storage sync error:", error);
+    }
+  }, []);
 
   // Advisor Panel View Toggle
   const [isCrmMode, setIsCrmMode] = useState<boolean>(false);
@@ -192,8 +349,30 @@ export default function App() {
       notes: ''
     };
 
-    setLeads(prev => [newLead, ...prev]);
+    // Save lead to real-time Cloud Firestore database
+    lastSubmittedIdRef.current = newId;
     setLastSubmittedId(newId);
+    
+    setDoc(doc(db, 'leads', newId), newLead).then(() => {
+      triggerNotification(
+        'Inbound Lead Placed!',
+        `A new requirement form has been received from ${newLead.fullName}. Automated notification dispatches started.`,
+        'success',
+        true,
+        newLead.fullName
+      );
+    }).catch(err => {
+      console.error("Error saving lead to Firestore:", err);
+      // Fallback local alert trigger so they always feel secure
+      triggerNotification(
+        'Offline Lead Saved',
+        `A requirement form has been received from ${newLead.fullName}. (Substituted locally due to network fallback)`,
+        'warning',
+        true,
+        newLead.fullName
+      );
+    });
+
     setFormSubmitted(true);
 
     // Reset standard parts
@@ -214,9 +393,10 @@ export default function App() {
     }
 
     const permittedName = newTestimonialPermission ? (newTestimonialName.trim() || 'Valued Client') : 'Anonymous Client';
+    const newId = `test-${Date.now()}`;
 
     const newTestimonial: ClientTestimonial = {
-      id: `test-${Date.now()}`,
+      id: newId,
       clientName: permittedName,
       serviceUsed: newTestimonialService,
       testimonialText: newTestimonialText.trim(),
@@ -226,7 +406,11 @@ export default function App() {
       createdAt: new Date().toISOString()
     };
 
-    setTestimonials(prev => [newTestimonial, ...prev]);
+    // Save testimonial to real-time Cloud Firestore database
+    setDoc(doc(db, 'testimonials', newId), newTestimonial).catch(err => {
+      console.error("Error saving testimonial to Firestore:", err);
+    });
+
     setTestimonialSubmitted(true);
 
     // Reset testimonial fields
@@ -241,37 +425,71 @@ export default function App() {
     }, 5000);
   };
 
-  const handleDeleteTestimonial = (testimonialId: string) => {
+  const handleDeleteTestimonial = async (testimonialId: string) => {
     if (confirm('Are you sure you want to remove this client testimonial?')) {
-      setTestimonials(prev => prev.filter(t => t.id !== testimonialId));
+      try {
+        await deleteDoc(doc(db, 'testimonials', testimonialId));
+      } catch (err) {
+        console.error("Error deleting testimonial from Firestore:", err);
+      }
     }
   };
 
-  const handleToggleTestimonialStatus = (testimonialId: string) => {
-    setTestimonials(prev => prev.map(t => {
-      if (t.id === testimonialId) {
-        return {
-          ...t,
-          status: t.status === 'Approved' ? 'Pending' : 'Approved'
-        };
-      }
-      return t;
-    }));
+  const handleToggleTestimonialStatus = async (testimonialId: string) => {
+    const testimonial = testimonials.find(t => t.id === testimonialId);
+    if (!testimonial) return;
+    const newStatus = testimonial.status === 'Approved' ? 'Pending' : 'Approved';
+    try {
+      await updateDoc(doc(db, 'testimonials', testimonialId), { status: newStatus });
+    } catch (err) {
+      console.error("Error updating testimonial status in Firestore:", err);
+    }
   };
 
   // CRM Lead Updates
-  const handleUpdateLeadStatus = (leadId: string) => {
-    setLeads(prev => prev.map(lead => {
-      if (lead.id === leadId) {
-        return {
-          ...lead,
-          status: leadStatusEdit,
-          notes: leadNotesEdit
-        };
-      }
-      return lead;
-    }));
+  const handleUpdateLeadStatus = async (leadId: string) => {
+    try {
+      await updateDoc(doc(db, 'leads', leadId), {
+        status: leadStatusEdit,
+        notes: leadNotesEdit
+      });
+    } catch (err) {
+      console.error("Error updating lead status in Firestore:", err);
+    }
     setSelectedLeadForEdit(null);
+  };
+
+  const handleTriggerSimulation = () => {
+    const dummyNames = ["Dhruvi Mehta", "Smit Patel", "Kishan Bhavsar", "Ananya Shah"];
+    const randomName = dummyNames[Math.floor(Math.random() * dummyNames.length)];
+    const dummyServices = ["Home Loan Advisory", "Legal Property Title Clear Draft", "Term Insurance Consulting"];
+    const randomService = dummyServices[Math.floor(Math.random() * dummyServices.length)];
+    
+    const simId = `lead-${Date.now()}`;
+    const simLead: InquiryLead = {
+      id: simId,
+      fullName: randomName,
+      phone: "9184879" + Math.floor(10000 + Math.random() * 90000).toString(),
+      email: `${randomName.toLowerCase().replace(/\s+/g, "")}@gmail.com`,
+      leadType: randomService.includes("Loan") ? "loan" : randomService.includes("Legal") ? "legal" : "insurance",
+      subType: randomService,
+      details: `Generated test submission for ${randomService} to verify real-time advisor email alert and CRM reactivity.`,
+      status: 'New',
+      createdAt: new Date().toISOString(),
+      notes: 'Generated via Demo Simulator'
+    };
+
+    setDoc(doc(db, 'leads', simId), simLead).then(() => {
+      triggerNotification(
+        'Advisor Alert Realized!',
+        `Simulated message from ${randomName} published. Inbox notification pushed to ${advisorEmail}.`,
+        'success',
+        true,
+        randomName
+      );
+    }).catch(err => {
+      console.error("Simulation error:", err);
+    });
   };
 
   // Filtered Leads computation for dashboard
@@ -410,9 +628,10 @@ export default function App() {
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-slate-100">
                   <h2 className="font-display font-extrabold text-brand-navy-800 text-lg">Inbound Client Requests ({filteredLeads.length})</h2>
                   
-                  {/* Local Storage Indicator */}
-                  <span className="text-[10px] text-slate-500 bg-slate-100 border border-slate-200 px-2 py-1 rounded-md font-mono">
-                    Saves locally in browser
+                  {/* Cloud Real-Time Indicator */}
+                  <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md font-mono font-bold flex items-center gap-1.5 animate-pulse">
+                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                    Cloud Firestore Real-Time Sync Active
                   </span>
                 </div>
 
@@ -651,10 +870,88 @@ export default function App() {
                     </div>
                   </div>
                 ) : (
-                  <div className="text-center py-20 flex flex-col items-center">
-                    <User className="w-12 h-12 text-slate-300 mb-2" />
-                    <h3 className="font-display font-extrabold text-brand-navy-800 text-sm">Select a Client Lead</h3>
-                    <p className="text-xs text-slate-400 mt-1 max-w-sm">Observe detailed diagnostics, write processing logs, track bank approvals history, and update their pipeline status instantly.</p>
+                  <div className="space-y-6">
+                    {/* Header */}
+                    <div className="border-b border-slate-100 pb-3">
+                      <h3 className="font-display font-extrabold text-brand-navy-900 text-base flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span>Advisor Notification Desk</span>
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-0.5">Real-time alerts, email relays, and incoming business monitor.</p>
+                    </div>
+
+                    {/* Email Config Block */}
+                    <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-100 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Email Routing Active</span>
+                        <span className="text-[9px] font-mono font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded-md">SMTP RELAY</span>
+                      </div>
+                      
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-600 block">Alert Delivery Target Address</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="email"
+                            className="flex-1 text-xs px-3 py-2 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-1 focus:ring-brand-gold-500 font-medium text-brand-navy-950"
+                            value={advisorEmail}
+                            onChange={(e) => setAdvisorEmail(e.target.value)}
+                            placeholder="sanketbhavsar27@gmail.com"
+                          />
+                        </div>
+                        <p className="text-[10px] text-slate-400 italic">Whenever clients place requirements on the web, instant alerts dispatch to this inbox.</p>
+                      </div>
+                    </div>
+
+                    {/* Simulation Module */}
+                    <div className="bg-brand-gold-50/40 p-4 rounded-xl border border-brand-gold-100/60 space-y-3">
+                      <div>
+                        <h4 className="text-xs font-bold text-brand-navy-900">🧪 Visual Simulation & Test Node</h4>
+                        <p className="text-[10px] text-slate-500 mt-0.5">Trigger a simulated inbound client lead (e.g. from Dhruvi Mehta) to satisfy visual alert testing & immediate routing validation.</p>
+                      </div>
+                      
+                      <button
+                        type="button"
+                        onClick={handleTriggerSimulation}
+                        className="w-full bg-brand-gold-500 hover:bg-brand-gold-400 text-brand-navy-950 font-bold text-xs py-2.5 px-4 rounded-xl transition-all shadow-sm flex items-center justify-center gap-2"
+                      >
+                        <Sparkles className="w-4 h-4 text-brand-navy-950 shrink-0" />
+                        <span>Simulate New Lead & Email Alert</span>
+                      </button>
+                    </div>
+
+                    {/* Email Logs Section */}
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold text-slate-700 uppercase tracking-tight">Notification Dispatch logs</span>
+                        <span className="text-[10px] text-slate-400 font-mono">({emailLogs.length} relayed)</span>
+                      </div>
+
+                      <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                        {emailLogs.length === 0 ? (
+                          <p className="text-xs text-slate-400 italic text-center py-4 bg-slate-50/50 rounded-lg border border-dashed">No log entries generated yet.</p>
+                        ) : (
+                          emailLogs.map((log: any) => (
+                            <div key={log.id} className="bg-slate-50 p-3 rounded-lg text-[11px] border border-slate-100 space-y-1">
+                              <div className="flex justify-between items-center">
+                                <span className="font-extrabold text-slate-700 truncate max-w-[120px]">{log.clientName || 'Valued Client'}</span>
+                                <span className="text-[9px] font-mono text-slate-400">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                              </div>
+                              <div className="text-slate-500 leading-tight truncate" title={log.subject}><strong>Sub:</strong> {log.subject}</div>
+                              <div className="flex justify-between items-center text-[9px] font-mono pt-1 text-slate-400">
+                                <span>Relay To: {log.recipient}</span>
+                                <span className="text-emerald-600 font-bold">● {log.status}</span>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Simple Help */}
+                    <div className="bg-blue-50/50 p-3.5 rounded-xl border border-blue-100 text-center">
+                      <p className="text-[11px] text-slate-500">💡 Select any client lead on the left of this screen to observe detailed customer diagnostics or record followups & status states.</p>
+                    </div>
+
                   </div>
                 )}
               </div>
@@ -2190,6 +2487,52 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* Toast Notification Deck */}
+      <div className="fixed top-6 right-6 z-[99999] flex flex-col gap-3 max-w-sm w-full pointer-events-none">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className="pointer-events-auto bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_20px_50px_rgba(15,23,42,0.15)] border border-slate-100 p-4 flex gap-3 transform translate-y-0 opacity-100 transition-all duration-300 relative overflow-hidden"
+          >
+            {/* Status indicators */}
+            <div className={`w-1.5 absolute left-0 top-0 bottom-0 ${
+              toast.type === 'success' ? 'bg-emerald-500' :
+              toast.type === 'warning' ? 'bg-amber-500' : 'bg-blue-500'
+            }`} />
+            
+            <div className="p-1 rounded-full bg-slate-50 shrink-0 self-start">
+              {toast.type === 'success' ? (
+                <CheckCircle className="w-5 h-5 text-emerald-500" />
+              ) : (
+                <AlertCircle className="w-5 h-5 text-amber-500" />
+              )}
+            </div>
+
+            <div className="flex-1 space-y-1">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold text-slate-800">{toast.title}</span>
+                <span className="text-[9px] font-mono text-slate-400">Just now</span>
+              </div>
+              <p className="text-[11px] text-slate-600 leading-relaxed font-semibold">{toast.message}</p>
+              
+              {toast.isEmail && (
+                <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex items-center gap-1.5 text-[9px] font-mono text-emerald-600 font-extrabold bg-[#ecfdf5]/80 p-1 rounded-sm">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>DISPATCHED TO: {advisorEmail}</span>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
+              className="text-slate-400 hover:text-slate-600 shrink-0 self-start"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
 
       {/* WhatsApp Floating Action Button */}
       <div

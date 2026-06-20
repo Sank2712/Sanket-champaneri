@@ -1,0 +1,95 @@
+{
+  "entities": {
+    "InquiryLead": {
+      "title": "InquiryLead",
+      "description": "Leads submitted via inquiry forms",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "fullName": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "leadType": {
+          "type": "string",
+          "enum": ["loan", "legal", "insurance"]
+        },
+        "subType": {
+          "type": "string"
+        },
+        "amount": {
+          "type": "number"
+        },
+        "details": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["New", "Contacted", "In Progress", "Completed", "Closed"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "bestTimeToCall": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "fullName", "phone", "email", "leadType", "subType", "details", "status", "createdAt"]
+    },
+    "ClientTestimonial": {
+      "title": "ClientTestimonial",
+      "description": "Client reviews and testimonials",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "clientName": {
+          "type": "string"
+        },
+        "serviceUsed": {
+          "type": "string"
+        },
+        "testimonialText": {
+          "type": "string"
+        },
+        "hasPermission": {
+          "type": "boolean"
+        },
+        "rating": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Approved", "Pending"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "clientName", "serviceUsed", "testimonialText", "hasPermission", "rating", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/leads/{leadId}": {
+      "schema": "InquiryLead",
+      "description": "User submit leads info"
+    },
+    "/testimonials/{testimonialId}": {
+      "schema": "ClientTestimonial",
+      "description": "Client submitted testimonials"
+    }
+  }
+}
