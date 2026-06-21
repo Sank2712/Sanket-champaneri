@@ -32,7 +32,8 @@ import {
   MessageCircle,
   Globe,
   Instagram,
-  Bell
+  Bell,
+  Menu
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { LOAN_SERVICES, LEGAL_SERVICES, INSURANCE_SERVICES, INITIAL_LEADS, FAQS, INITIAL_TESTIMONIALS } from './data';
@@ -44,8 +45,30 @@ import LoanChecklistDownload from './components/LoanChecklistDownload';
 
 export default function App() {
   // Navigation and Tab management
-  const [activeTab, setActiveTab] = useState<'home' | 'services' | 'inquire' | 'about_us' | 'go_live'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'services' | 'inquire' | 'about_us' | 'go_live' | 'links'>('home');
   const [faqOpenIndex, setFaqOpenIndex] = useState<number | null>(null);
+
+  // Hash routing for social links (srfinserv.co/#links)
+  useEffect(() => {
+    const checkHashRoute = () => {
+      if (window.location.hash === '#links' || window.location.hash === '#social' || window.location.hash === '#social-hub') {
+        setActiveTab('links');
+        setIsCrmMode(false);
+      } else if (window.location.hash === '#services') {
+        setActiveTab('services');
+        setIsCrmMode(false);
+      } else if (window.location.hash === '#inquire') {
+        setActiveTab('inquire');
+        setIsCrmMode(false);
+      } else if (window.location.hash === '#about_us') {
+        setActiveTab('about_us');
+        setIsCrmMode(false);
+      }
+    };
+    checkHashRoute();
+    window.addEventListener('hashchange', checkHashRoute);
+    return () => window.removeEventListener('hashchange', checkHashRoute);
+  }, []);
 
   // Floating WhatsApp FAB entrance animation state
   const [showWhatsappFab, setShowWhatsappFab] = useState<boolean>(false);
@@ -250,6 +273,62 @@ export default function App() {
 
   // Advisor Panel View Toggle
   const [isCrmMode, setIsCrmMode] = useState<boolean>(false);
+  const [showCrmLoginModal, setShowCrmLoginModal] = useState<boolean>(false);
+  const [showDocumentChecklistModal, setShowDocumentChecklistModal] = useState<boolean>(false);
+  const [showInquiryModal, setShowInquiryModal] = useState<boolean>(false);
+  const [showFaqModal, setShowFaqModal] = useState<boolean>(false);
+  const [activeServiceSubTab, setActiveServiceSubTab] = useState<'loan' | 'legal' | 'insurance'>('loan');
+  const [isLoanExpanded, setIsLoanExpanded] = useState<boolean>(true);
+  const [isLegalExpanded, setIsLegalExpanded] = useState<boolean>(false);
+  const [isInsuranceExpanded, setIsInsuranceExpanded] = useState<boolean>(false);
+  const [showMenuDropdown, setShowMenuDropdown] = useState<boolean>(false);
+  const [crmPasscodeInput, setCrmPasscodeInput] = useState<string>('');
+  const [isCrmAuthenticated, setIsCrmAuthenticated] = useState<boolean>(false);
+  const [crmLoginError, setCrmLoginError] = useState<string>('');
+
+  // Counter states for secret triggers (logo or footer)
+  const [logoClickCount, setLogoClickCount] = useState<number>(0);
+  const [footerClickCount, setFooterClickCount] = useState<number>(0);
+
+  // Keyboard shortcut listener: Ctrl + Shift + C
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'c') ||
+        (e.shiftKey && e.altKey && e.key.toLowerCase() === 'c')
+      ) {
+        e.preventDefault();
+        setShowCrmLoginModal(true);
+        setCrmPasscodeInput('');
+        setCrmLoginError('');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Timer to clear secret click accumulators if too much time passes
+  useEffect(() => {
+    if (logoClickCount > 0) {
+      const timer = setTimeout(() => setLogoClickCount(0), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [logoClickCount]);
+
+  useEffect(() => {
+    if (footerClickCount > 0) {
+      const timer = setTimeout(() => setFooterClickCount(0), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [footerClickCount]);
+
+  const triggerCrmPortalLogin = () => {
+    setShowCrmLoginModal(true);
+    setCrmPasscodeInput('');
+    setCrmLoginError('');
+    setLogoClickCount(0);
+    setFooterClickCount(0);
+  };
 
   // GoDaddy India Domain Setup states
   const [goLiveStep, setGoLiveStep] = useState<'idle' | 'billing' | 'payment' | 'completed'>('idle');
@@ -353,7 +432,7 @@ export default function App() {
       ...prev,
       requirement: req,
     }));
-    setActiveTab('inquire');
+    setShowInquiryModal(true);
     
     // Direct inform on WhatsApp: e.g. "Hello Sanket! I'm interested in Home Loans"
     const customerName = formData.fullName || 'A customer';
@@ -453,7 +532,8 @@ export default function App() {
       hasPermission: newTestimonialPermission,
       rating: newTestimonialRating,
       status: 'Approved',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      advisorReply: 'Thank you for choosing SR Finserv'
     };
 
     // Save testimonial to real-time Cloud Firestore database
@@ -493,6 +573,14 @@ export default function App() {
       await updateDoc(doc(db, 'testimonials', testimonialId), { status: newStatus });
     } catch (err) {
       console.error("Error updating testimonial status in Firestore:", err);
+    }
+  };
+
+  const handleUpdateTestimonialReply = async (testimonialId: string, replyText: string) => {
+    try {
+      await updateDoc(doc(db, 'testimonials', testimonialId), { advisorReply: replyText });
+    } catch (err) {
+      console.error("Error updating testimonial reply in Firestore:", err);
     }
   };
 
@@ -619,54 +707,232 @@ export default function App() {
       <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-brand-navy-100 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => { setActiveTab('home'); setIsCrmMode(false); }}>
-            <div className="w-11 h-11 bg-brand-navy-600 rounded-xl flex items-center justify-center border border-brand-navy-100 shadow-xs">
-              <span className="font-display font-black text-xl text-white tracking-tighter">SR</span>
-            </div>
-            <div>
-              <span id="brand-title" className="font-display text-xl font-extrabold text-brand-navy-950 block tracking-tight">
-                SR Finserv
-              </span>
-              <span className="text-[10px] uppercase tracking-wider font-extrabold text-brand-navy-600 block -mt-1">
-                Legal & Loans Advisory
-              </span>
+          <div className="flex items-center gap-3 sm:gap-4 shrink-0">
+            <div 
+              className="flex items-center gap-3 cursor-pointer select-none" 
+              onClick={() => { 
+                setActiveTab('home'); 
+                setIsCrmMode(false);
+                const nextCount = logoClickCount + 1;
+                if (nextCount >= 5) {
+                  triggerCrmPortalLogin();
+                } else {
+                  setLogoClickCount(nextCount);
+                }
+              }}
+            >
+              <div className="w-11 h-11 bg-brand-navy-600 rounded-xl flex items-center justify-center border border-brand-navy-100 shadow-xs">
+                <span className="font-display font-black text-xl text-white tracking-tighter">SR</span>
+              </div>
+              <div className="hidden min-[360px]:block">
+                <span id="brand-title" className="font-display text-base sm:text-xl font-extrabold text-brand-navy-950 block tracking-tight">
+                  SR Finserv
+                </span>
+                <span className="text-[9px] sm:text-[10px] uppercase tracking-wider font-extrabold text-brand-navy-600 block -mt-1">
+                  Legal & Loans Advisory
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* Nav Links */}
-          <nav className="hidden md:flex items-center gap-8">
-            <button
-              onClick={() => { setActiveTab('home'); setIsCrmMode(false); }}
-              className={`text-base font-bold transition-colors ${activeTab === 'home' && !isCrmMode ? 'text-brand-navy-600 border-b-2 border-brand-navy-600 pb-1' : 'text-slate-600 hover:text-brand-navy-900'}`}
-            >
-              Overview
-            </button>
-            <button
-              onClick={() => { setActiveTab('services'); setIsCrmMode(false); }}
-              className={`text-base font-bold transition-colors ${activeTab === 'services' && !isCrmMode ? 'text-brand-navy-600 border-b-2 border-brand-navy-600 pb-1' : 'text-slate-600 hover:text-brand-navy-900'}`}
-            >
-              Services
-            </button>
-            <button
-              onClick={() => { setActiveTab('about_us'); setIsCrmMode(false); }}
-              className={`text-base font-bold transition-colors ${activeTab === 'about_us' && !isCrmMode ? 'text-brand-navy-600 border-b-2 border-brand-navy-600 pb-1' : 'text-slate-600 hover:text-brand-navy-900'}`}
-            >
-              About Us
-            </button>
-            <button
-              onClick={() => { setActiveTab('inquire'); setIsCrmMode(false); }}
-              className={`text-base font-bold transition-colors ${activeTab === 'inquire' && !isCrmMode ? 'text-brand-navy-600 border-b-2 border-brand-navy-600 pb-1' : 'text-slate-600 hover:text-brand-navy-900'}`}
-            >
-              Book Callback
-            </button>
-          </nav>
-
           {/* Action badge - Simple & Secure */}
           <div className="flex items-center gap-3">
-            <span className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-bold bg-blue-50 text-brand-navy-600 border border-blue-100">
-              <Shield className="w-4 h-4 text-brand-navy-600" />
+            <span className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-50 text-brand-navy-600 border border-blue-100">
+              <Shield className="w-3.5 h-3.5 text-brand-navy-600" />
               <span>Doorstep Service</span>
             </span>
+            {isCrmMode && (
+              <button
+                onClick={() => {
+                  setIsCrmMode(false);
+                  setIsCrmAuthenticated(false); // require re-login for security next time
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs border bg-brand-gold-500 text-brand-navy-950 border-brand-gold-400 font-sans font-extrabold hover:bg-brand-gold-400"
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Exit CRM Portal</span>
+              </button>
+            )}
+
+            {/* Interactive Hamburger Dropdown Menu on Corner Side - Contains all Navigation & Required Docs */}
+            <div className="relative">
+              <button
+                onClick={() => setShowMenuDropdown(!showMenuDropdown)}
+                className="p-2 sm:p-2.5 bg-white hover:bg-slate-50 border border-slate-200 hover:border-blue-300 text-slate-600 hover:text-blue-600 rounded-xl transition-all shadow-xs active:scale-95 cursor-pointer select-none relative flex items-center justify-center animate-fade-in"
+                title="Open menu"
+                id="corner-menu-trigger"
+              >
+                <Menu className="w-5 h-5 shrink-0" />
+              </button>
+
+              {showMenuDropdown && (
+                <>
+                  {/* Backdrop overlay to close when clicking outside */}
+                  <div 
+                    className="fixed inset-0 z-40 bg-transparent" 
+                    onClick={() => setShowMenuDropdown(false)} 
+                  />
+                  
+                  {/* Floating Action Dropdown Menu aligned to right corner */}
+                  <div className="absolute right-0 mt-3 w-64 bg-white border border-slate-200/80 rounded-2xl shadow-[0_12px_30px_rgba(15,23,42,0.15)] z-50 py-2.5 animate-[scaleIn_0.15s_ease-out]">
+                    <div className="px-3 pb-2 mb-1.5 border-b border-slate-100 flex items-center justify-between">
+                      <span className="text-[10px] uppercase font-mono font-bold text-slate-400 tracking-wider">SR Navigation</span>
+                      <span className="text-[8px] uppercase tracking-widest bg-blue-50 text-blue-600 font-extrabold px-1.5 py-0.5 rounded-md">Advisory</span>
+                    </div>
+                    
+                    {/* Main Website Navigation Tabs */}
+                    <button
+                      onClick={() => {
+                        setShowMenuDropdown(false);
+                        setActiveTab('home');
+                        setIsCrmMode(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-slate-50 transition-all cursor-pointer select-none group rounded-xl ${activeTab === 'home' && !isCrmMode ? 'bg-blue-50/40' : ''}`}
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-600 flex items-center justify-center font-bold shrink-0 group-hover:scale-105 transition-transform">
+                        🏠
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className={`block text-xs font-bold ${activeTab === 'home' && !isCrmMode ? 'text-blue-600 font-black' : 'text-slate-900'} group-hover:text-blue-600 transition-colors font-sans truncate`}>
+                          Overview
+                        </span>
+                        <span className="block text-[10px] text-slate-500 font-medium font-sans truncate mt-0.5">
+                          Advisory introduction & trust
+                        </span>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setShowMenuDropdown(false);
+                        setActiveTab('services');
+                        setIsCrmMode(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-slate-50 transition-all cursor-pointer select-none group rounded-xl ${activeTab === 'services' && !isCrmMode ? 'bg-blue-50/40' : ''}`}
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-600 flex items-center justify-center font-bold shrink-0 group-hover:scale-105 transition-transform">
+                        🏦
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className={`block text-xs font-bold ${activeTab === 'services' && !isCrmMode ? 'text-blue-600 font-black' : 'text-slate-900'} group-hover:text-blue-600 transition-colors font-sans truncate`}>
+                          Services
+                        </span>
+                        <span className="block text-[10px] text-slate-500 font-medium font-sans truncate mt-0.5">
+                          Loans, Legal, & Insurance catalog
+                        </span>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setShowMenuDropdown(false);
+                        setActiveTab('about_us');
+                        setIsCrmMode(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-slate-50 transition-all cursor-pointer select-none group rounded-xl ${activeTab === 'about_us' && !isCrmMode ? 'bg-blue-50/40' : ''}`}
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-600 flex items-center justify-center font-bold shrink-0 group-hover:scale-105 transition-transform">
+                        🏢
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className={`block text-xs font-bold ${activeTab === 'about_us' && !isCrmMode ? 'text-blue-600 font-black' : 'text-slate-900'} group-hover:text-blue-600 transition-colors font-sans truncate`}>
+                          About Us
+                        </span>
+                        <span className="block text-[10px] text-slate-500 font-medium font-sans truncate mt-0.5">
+                          Sanket's journey & office details
+                        </span>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setShowMenuDropdown(false);
+                        setActiveTab('links');
+                        setIsCrmMode(false);
+                        window.location.hash = '#links';
+                      }}
+                      className={`w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-slate-50 transition-all cursor-pointer select-none group rounded-xl ${activeTab === 'links' && !isCrmMode ? 'bg-pink-50/40' : ''}`}
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-pink-50 text-pink-600 flex items-center justify-center font-bold shrink-0 group-hover:scale-105 transition-transform">
+                        📱
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className={`block text-xs font-bold ${activeTab === 'links' && !isCrmMode ? 'text-pink-600 font-black' : 'text-slate-900'} group-hover:text-pink-600 transition-colors font-sans truncate`}>
+                          Social Bio-Links Hub
+                        </span>
+                        <span className="block text-[10px] text-slate-500 font-medium font-sans truncate mt-0.5">
+                          Instagram / Bio share links page
+                        </span>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setShowMenuDropdown(false);
+                        setShowInquiryModal(true);
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-slate-50 transition-all cursor-pointer select-none group rounded-xl"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-600 flex items-center justify-center font-bold shrink-0 group-hover:scale-105 transition-transform">
+                        📞
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className="block text-xs font-bold text-slate-900 group-hover:text-blue-600 transition-colors font-sans truncate">
+                          Customer Requirement Form
+                        </span>
+                        <span className="block text-[10px] text-slate-500 font-medium font-sans truncate mt-0.5">
+                          Book a Doorstep Callback
+                        </span>
+                      </div>
+                    </button>
+
+                    <div className="my-1 border-t border-slate-100" />
+
+                    {/* Highly Requested Document Checklist point */}
+                    <button
+                      onClick={() => {
+                        setShowMenuDropdown(false);
+                        setShowDocumentChecklistModal(true);
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-blue-50/50 transition-all cursor-pointer select-none group rounded-xl"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold shrink-0 group-hover:scale-105 transition-transform">
+                        📋
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className="block text-xs font-bold text-slate-900 group-hover:text-blue-600 transition-colors font-sans truncate">
+                          Required Docs
+                        </span>
+                        <span className="block text-[10px] text-slate-500 font-semibold font-sans truncate mt-0.5">
+                          Downloadable Checklist PDF
+                        </span>
+                      </div>
+                    </button>
+
+                    {/* Frequently Asked Questions */}
+                    <button
+                      onClick={() => {
+                        setShowMenuDropdown(false);
+                        setShowFaqModal(true);
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-amber-50/50 transition-all cursor-pointer select-none group rounded-xl"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold shrink-0 group-hover:scale-105 transition-transform">
+                        ❓
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className="block text-xs font-bold text-slate-900 group-hover:text-brand-navy-600 transition-colors font-sans truncate">
+                          Frequently Asked FAQs
+                        </span>
+                        <span className="block text-[10px] text-slate-500 font-semibold font-sans truncate mt-0.5">
+                          Process Answers & Stamp Laws
+                        </span>
+                      </div>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -1199,6 +1465,7 @@ export default function App() {
                       <th className="p-3">Client Name</th>
                       <th className="p-3">Service</th>
                       <th className="p-3">Testimonial Content</th>
+                      <th className="p-3 min-w-[180px]">Advisor Reply (Auto Reply)</th>
                       <th className="p-3">Name Permission</th>
                       <th className="p-3">Status</th>
                       <th className="p-3 text-right">Actions</th>
@@ -1220,6 +1487,28 @@ export default function App() {
                         </td>
                         <td className="p-3 max-w-sm font-sans italic truncate" title={test.testimonialText}>
                           "{test.testimonialText}"
+                        </td>
+                        <td className="p-3">
+                          <input
+                            type="text"
+                            defaultValue={test.advisorReply || ''}
+                            onBlur={(e) => {
+                              if (e.target.value !== (test.advisorReply || '')) {
+                                handleUpdateTestimonialReply(test.id, e.target.value);
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                const target = e.target as HTMLInputElement;
+                                if (target.value !== (test.advisorReply || '')) {
+                                  handleUpdateTestimonialReply(test.id, target.value);
+                                }
+                                target.blur();
+                              }
+                            }}
+                            placeholder="Add auto reply response..."
+                            className="w-full text-[11px] font-medium text-slate-850 bg-slate-50 rounded-xl px-3 py-1.5 border border-slate-250 hover:bg-slate-100/50 focus:bg-white focus:border-brand-navy-600 outline-none transition-all placeholder:text-slate-400 placeholder:font-normal"
+                          />
                         </td>
                         <td className="p-3">
                           {test.hasPermission ? (
@@ -1977,7 +2266,7 @@ export default function App() {
                   </div>
 
                   <button
-                    onClick={() => { setActiveTab('inquire'); }}
+                    onClick={() => { setShowInquiryModal(true); }}
                     className="w-full bg-brand-navy-600 hover:bg-brand-navy-800 text-white font-black text-sm py-4 rounded-xl transition-all shadow-md text-center mt-2.5"
                   >
                     Launch Priority Advisor Call Back
@@ -2070,6 +2359,344 @@ export default function App() {
           </section>
 
         </main>
+      ) : activeTab === 'links' ? (
+        /* SPECIAL SOCIAL SHARING AND LINK-IN-BIO HUB */
+        <main className="flex-1 bg-slate-50 py-8 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-6xl mx-auto space-y-8 animate-fade-in">
+            {/* Top Info Banner for Sanket on Desktop */}
+            <div className="hidden lg:flex items-center justify-between bg-gradient-to-r from-pink-600 to-indigo-700 text-white rounded-3xl p-6 shadow-md border border-pink-500/30">
+              <div className="space-y-1">
+                <span className="text-[10px] uppercase font-bold tracking-widest bg-white/20 border border-white/20 px-3 py-1 rounded-full">
+                  📱 Social Outreach Launchpad
+                </span>
+                <h2 className="font-display font-black text-2.5xl mt-1.5 font-sans">srfinserv.co Social Hub</h2>
+                <p className="text-pink-100 text-xs">
+                  This dashboard manages your unified Link-in-Bio profile. Use the copied link on your social handles to drive high-intent leads.
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText("https://www.srfinserv.co/#links");
+                    triggerNotification("Link Copied!", "Your official Instagram Bio Link is ready to paste.", "success", false);
+                  }}
+                  className="bg-white hover:bg-slate-100 text-pink-700 font-extrabold text-xs px-5 py-3 rounded-xl transition-all shadow-sm flex items-center gap-1.5"
+                >
+                  <span>🔗</span> Copy Bio Link
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+              
+              {/* MOBILE PREVIEWER AND LINK-IN-BIO LANDING PAGE */}
+              {/* On mobile screens, this takes 100% space and looks like a gorgeous native Linktree. On desktop, it is framed inside a beautiful smartphone container. */}
+              <div className="lg:col-span-5 flex justify-center w-full">
+                
+                {/* Smartphone Wrapper Frame (Desktop-only visual) */}
+                <div className="w-full max-w-[420px] bg-white lg:rounded-[42px] lg:border-[10px] lg:border-slate-900 lg:shadow-[0_25px_60px_rgba(15,23,42,0.3)] overflow-hidden lg:relative lg:aspect-[9/18.5] flex flex-col min-h-[640px]">
+                  
+                  {/* Smartphone Speaker/Camera notch (Desktop-only visual) */}
+                  <div className="hidden lg:block absolute top-0 left-1/2 -translate-x-1/2 h-5 w-32 bg-slate-900 rounded-b-xl z-20" />
+                  
+                  {/* Standalone Link-in-Bio Main Canvas */}
+                  <div className="flex-1 bg-gradient-to-b from-slate-900 via-brand-navy-950 to-slate-900 text-white relative flex flex-col p-6 sm:p-8 pt-10 sm:pt-14 overflow-y-auto">
+                    
+                    {/* Pulsing Light Accents */}
+                    <div className="absolute top-[-50px] right-[-50px] w-48 h-48 bg-pink-500/10 rounded-full blur-3xl pointer-events-none" />
+                    <div className="absolute bottom-[-50px] left-[-50px] w-48 h-48 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+
+                    {/* Header profile section */}
+                    <div className="text-center space-y-4 mb-4 select-none">
+                      <div className="inline-flex relative">
+                        <div className="w-20 h-20 bg-gradient-to-br from-brand-gold-400 to-amber-500 rounded-full p-0.5 shadow-lg flex items-center justify-center">
+                          <div className="w-full h-full bg-brand-navy-950 rounded-full flex items-center justify-center font-display font-black text-2xl text-brand-gold-500">
+                            SR
+                          </div>
+                        </div>
+                        {/* Interactive Sparkle badge */}
+                        <span className="absolute bottom-0 right-0 w-6 h-6 bg-blue-600 text-white border-2 border-slate-900 rounded-full flex items-center justify-center text-[10px] shadow-sm font-bold" title="Verified Professional Profile">
+                          ✓
+                        </span>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-center gap-1.5 font-sans">
+                          <h1 className="font-display font-black text-lg tracking-tight text-white">SR Finserv Advisory</h1>
+                        </div>
+                        <p className="text-[11px] font-bold text-brand-gold-400 uppercase tracking-widest font-sans">
+                          Sanket Champaneri • CEO
+                        </p>
+                        <p className="text-xs text-slate-300 max-w-[280px] mx-auto leading-relaxed">
+                          9+ Years expert doorstep banking & legal contracts solutions in Ahmedabad.
+                        </p>
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-slate-800 border border-slate-700 text-slate-300 mt-2 font-display">
+                          📍 Prahladnagar, Ahmedabad
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Action Link Blocks Container */}
+                    <div className="space-y-4 z-10">
+                      
+                      {/* LINK 1: DIRECT WHATSAPP */}
+                      <a
+                        href="https://wa.me/918487974404?text=Hello%20SR%20Finserv.%20I%20visited%20your%20Social%20Media%20links%20hub%20and%20want%20to%20get%20in%20touch%20regarding%20financial/loans/legal%20guidance."
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group flex items-center gap-3 bg-[#25D366]/10 hover:bg-[#25D366]/20 border border-[#25D366]/40 p-4 rounded-2xl transition-all shadow-sm hover:scale-[1.02] active:scale-95 cursor-pointer"
+                      >
+                        <div className="w-10 h-10 rounded-xl bg-[#25D366] text-white flex items-center justify-center text-lg shadow-sm shrink-0 group-hover:rotate-6 transition-transform">
+                          💬
+                        </div>
+                        <div className="flex-1 min-w-0 text-left">
+                          <span className="block font-black text-[9px] text-[#25D366] uppercase tracking-wider">Fastest Connect</span>
+                          <span className="block text-xs font-black text-white mt-0.5 truncate font-display">Chat Live on WhatsApp</span>
+                          <span className="block text-[10px] text-slate-400 font-semibold truncate font-sans">Instant advisor query clearance</span>
+                        </div>
+                        <span className="text-slate-400 text-xs font-mono group-hover:translate-x-1 transition-transform">→</span>
+                      </a>
+
+                      {/* LINK 2: CALL ADVISOR HOTLINE */}
+                      <a
+                        href="tel:+918487974404"
+                        className="group flex items-center gap-3 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-400/40 p-4 rounded-2xl transition-all shadow-sm hover:scale-[1.02] active:scale-95 cursor-pointer"
+                      >
+                        <div className="w-10 h-10 rounded-xl bg-sky-500 text-white flex items-center justify-center text-lg shadow-sm shrink-0 group-hover:scale-105 transition-all">
+                          📞
+                        </div>
+                        <div className="flex-1 min-w-0 text-left">
+                          <span className="block font-black text-[9px] text-sky-400 uppercase tracking-wider">Call Hotline</span>
+                          <span className="block text-xs font-black text-white mt-0.5 truncate font-display">+91 84879 74404</span>
+                          <span className="block text-[10px] text-slate-400 font-semibold truncate font-sans">Direct advice line (10 AM - 7 PM)</span>
+                        </div>
+                        <span className="text-slate-400 text-xs font-mono group-hover:translate-x-1 transition-transform">→</span>
+                      </a>
+
+                      {/* LINK 3: BOOK DOORSTEP callback */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab('inquire');
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        className="w-full group flex items-center gap-3 bg-brand-gold-500/10 hover:bg-brand-gold-500/20 border border-brand-gold-400/40 p-4 rounded-2xl transition-all shadow-sm hover:scale-[1.02] active:scale-95 cursor-pointer"
+                      >
+                        <div className="w-10 h-10 rounded-xl bg-brand-gold-500 text-brand-navy-950 flex items-center justify-center text-lg shadow-sm shrink-0 group-hover:-rotate-6 transition-transform">
+                          🏠
+                        </div>
+                        <div className="flex-1 min-w-0 text-left">
+                          <span className="block font-black text-[9px] text-brand-gold-400 uppercase tracking-wider">Free Callback Form</span>
+                          <span className="block text-xs font-black text-white mt-0.5 truncate font-display">Book Doorstep Callback</span>
+                          <span className="block text-[10px] text-slate-400 font-semibold truncate font-sans">Prefills customized local requests</span>
+                        </div>
+                        <span className="text-slate-400 text-xs font-mono group-hover:translate-x-1 transition-transform">→</span>
+                      </button>
+
+                      {/* LINK 4: DOWNLOAD DOCUMENT CHECKLIST */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowDocumentChecklistModal(true);
+                        }}
+                        className="w-full group flex items-center gap-3 bg-pink-500/10 hover:bg-pink-500/20 border border-pink-400/40 p-4 rounded-2xl transition-all shadow-sm hover:scale-[1.02] active:scale-95 cursor-pointer font-sans"
+                      >
+                        <div className="w-10 h-10 rounded-xl bg-pink-500 text-white flex items-center justify-center text-lg shadow-sm shrink-0 group-hover:scale-105 transition-all">
+                          📋
+                        </div>
+                        <div className="flex-1 min-w-0 text-left">
+                          <span className="block font-black text-[9px] text-pink-400 uppercase tracking-wider">Required Checklist</span>
+                          <span className="block text-xs font-black text-white mt-0.5 truncate font-display">Get Loan Docs PDF</span>
+                          <span className="block text-[10px] text-slate-400 font-semibold truncate">Document check before sanctioning</span>
+                        </div>
+                        <span className="text-slate-400 text-xs font-mono group-hover:translate-x-1 transition-transform">→</span>
+                      </button>
+
+                      {/* LINK 5: EXPAND STANDARD SITE VIEW */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab('home');
+                          window.location.hash = '';
+                        }}
+                        className="w-full group flex items-center gap-3 bg-slate-850 hover:bg-slate-800 border border-slate-700 p-4 rounded-2xl transition-all shadow-sm hover:scale-[1.02] active:scale-95 cursor-pointer font-sans"
+                      >
+                        <div className="w-10 h-10 rounded-xl bg-slate-700 text-slate-300 flex items-center justify-center text-lg shadow-sm shrink-0">
+                          🌐
+                        </div>
+                        <div className="flex-1 min-w-0 text-left">
+                          <span className="block font-black text-[9px] text-slate-400 uppercase tracking-wider">Full Experience</span>
+                          <span className="block text-xs font-black text-white mt-0.5 truncate font-display">Explore Main Website</span>
+                          <span className="block text-[10px] text-slate-400 font-semibold truncate">Calculators, full catalogs, reviews</span>
+                        </div>
+                        <span className="text-slate-400 text-xs font-mono group-hover:translate-x-1 transition-transform">→</span>
+                      </button>
+
+                    </div>
+
+                    {/* Social links handles row */}
+                    <div className="flex items-center justify-center gap-6 mt-10 border-t border-slate-800/60 pt-6 select-none">
+                      <a href="https://www.instagram.com/SR_Finserv/" target="_blank" rel="noopener noreferrer" className="p-3 bg-slate-800 hover:bg-pink-600 text-slate-300 hover:text-white rounded-xl transition-all" title="Instagram">
+                        <Instagram className="w-5 h-5 shrink-0" />
+                      </a>
+                      <a href="mailto:sanketbhavsar27@gmail.com" className="p-3 bg-slate-800 hover:bg-emerald-600 text-slate-300 hover:text-white rounded-xl transition-all" title="Email Info">
+                        <FileText className="w-5 h-5 shrink-0" />
+                      </a>
+                      <a href="https://maps.google.com/?q=Venus+Atlantis+Corporate+Park+Prahladnagar+Ahmedabad" target="_blank" rel="noopener noreferrer" className="p-3 bg-slate-800 hover:bg-blue-600 text-slate-300 hover:text-white rounded-xl transition-all" title="Head Office Map">
+                        <Globe className="w-5 h-5 shrink-0" />
+                      </a>
+                    </div>
+
+                    <div className="text-center mt-auto pt-8">
+                      <p className="text-[10px] text-slate-500 font-mono">
+                        &copy; {new Date().getFullYear()} SR Finserv • srfinserv.co
+                      </p>
+                      <p className="text-[8px] text-slate-600 font-semibold tracking-wider mt-0.5 uppercase">
+                        Ahmedabad's Best Doorstep Loans & Legal Partner
+                      </p>
+                    </div>
+
+                  </div>
+                </div>
+              </div>
+
+              {/* CO-SANKET PROMOTIONAL TOOLS DASHBOARD PANEL (HIDDEN ON NATIVE MOBILE) */}
+              <div className="lg:col-span-7 space-y-6 w-full font-sans">
+                
+                {/* Visual Section Header */}
+                <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-6">
+                  <div className="border-b border-slate-100 pb-5">
+                    <h3 className="font-display font-black text-xl text-brand-navy-950 flex items-center gap-2">
+                      <span>📱</span> Link-in-Bio Distribution Kit
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">Sanket, copy and paste these optimized URLs into your profiles to guide social clients straight to key service checkout nodes.</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    
+                    {/* Link 1: Unified Social Profile */}
+                    <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col justify-between space-y-3.5 relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-pink-500/5 rounded-full blur-xl pointer-events-none" />
+                      <div className="space-y-1">
+                        <span className="text-[9px] uppercase font-bold tracking-widest text-pink-600 bg-pink-50 px-2.5 py-1 rounded-full border border-pink-100 font-display">Recommended URL</span>
+                        <h4 className="font-display font-bold text-brand-navy-950 text-sm mt-1.5">Instagram / Bio Link</h4>
+                        <p className="text-[11px] text-slate-500 leading-normal font-semibold font-sans">This points customers to the mobile-first consolidated bio directory screen.</p>
+                      </div>
+                      <div className="bg-white px-3.5 py-3 rounded-xl border border-slate-200 font-mono text-xs font-bold text-slate-700 select-all truncate">
+                        https://www.srfinserv.co/#links
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText("https://www.srfinserv.co/#links");
+                          triggerNotification("URL Copied!", "Copied: https://www.srfinserv.co/#links", "success", false);
+                        }}
+                        className="w-full bg-slate-900 hover:bg-slate-950 text-white font-extrabold text-xs py-3 rounded-xl transition-all text-center flex items-center justify-center gap-2 shadow-xs cursor-pointer select-none"
+                      >
+                        Copy Bio Link
+                      </button>
+                    </div>
+
+                    {/* Link 2: Direct Callback Form */}
+                    <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col justify-between space-y-3.5 relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-[#2563eb]/5 rounded-full blur-xl pointer-events-none" />
+                      <div className="space-y-1">
+                        <span className="text-[9px] uppercase font-bold tracking-widest text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-100 font-display">Deep Link URL</span>
+                        <h4 className="font-display font-bold text-brand-navy-950 text-sm mt-1.5">Direct Inquiry Link</h4>
+                        <p className="text-[11px] text-slate-500 leading-normal font-semibold font-sans">Bypasses other panels and takes customers directly to the lead registration form.</p>
+                      </div>
+                      <div className="bg-white px-3.5 py-3 rounded-xl border border-slate-200 font-mono text-xs font-bold text-slate-700 select-all truncate">
+                        https://www.srfinserv.co/#inquire
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText("https://www.srfinserv.co/#inquire");
+                          triggerNotification("URL Copied!", "Copied: https://www.srfinserv.co/#inquire", "success", false);
+                        }}
+                        className="w-full bg-slate-900 hover:bg-slate-950 text-white font-extrabold text-xs py-3 rounded-xl transition-all text-center flex items-center justify-center gap-2 shadow-xs cursor-pointer select-none"
+                      >
+                        Copy Direct Inquiry Link
+                      </button>
+                    </div>
+
+                  </div>
+                </div>
+
+                {/* Desk/Print-Friendly QR Code Generator Frame */}
+                <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
+                  <div className="md:col-span-5 flex flex-col items-center col-span-12">
+                    <div className="bg-white p-5 rounded-2xl border-2 border-dashed border-slate-200 shadow-md flex flex-col items-center gap-3">
+                      <div className="bg-white p-2 border border-slate-100 rounded-xl">
+                        <QRCodeSVG 
+                          value="https://www.srfinserv.co/#links"
+                          size={150}
+                          bgColor="#FFFFFF"
+                          fgColor="#0B132B"
+                          level="H"
+                          includeMargin={true}
+                        />
+                      </div>
+                      <span className="text-[10px] font-black text-brand-navy-950 uppercase tracking-widest bg-brand-gold-100 border border-brand-gold-300 px-3 py-1 rounded-full">
+                        Scan for SR Finserv
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="md:col-span-7 space-y-4 text-left col-span-12">
+                    <span className="text-[9px] uppercase font-bold tracking-widest text-brand-navy-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-100">Office Desk Promo</span>
+                    <h3 className="font-display font-black text-lg text-brand-navy-950">Print-Ready Desk QR Code</h3>
+                    <p className="text-xs text-slate-500 leading-normal font-semibold font-sans">
+                      Excellent for offline promotion! Place this desk QR code in your Prahladnagar office or print it on business cards. When Ahmedabad clients scan it, they instantly open your mobile-responsive social bio.
+                    </p>
+                    <div className="pt-2 flex gap-3 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          window.print();
+                        }}
+                        className="bg-brand-navy-950 hover:bg-brand-navy-900 text-white font-extrabold text-xs px-4 py-3 rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                      >
+                        🖨️ Print Dashboard QR
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Integration tutorials on Social Networks */}
+                <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-5">
+                  <h4 className="font-display font-black text-base text-brand-navy-950 font-sans">📋 How to Integrate This Link Into Your Platforms:</h4>
+                  
+                  <div className="space-y-4">
+                    <div className="flex gap-3 text-xs leading-normal font-semibold text-slate-600 font-sans">
+                      <div className="w-6 h-6 rounded-lg bg-pink-50 text-pink-600 font-extrabold flex items-center justify-center shrink-0">1</div>
+                      <p>
+                        <strong className="text-brand-navy-950">Add to your Instagram Bio:</strong> Edit your Instagram profile, click "Links", select "Add External Link", and paste <code className="bg-slate-100 px-1 py-0.5 rounded font-mono font-bold text-pink-600">https://www.srfinserv.co/#links</code>. Give it the title "SR Finserv Doorstep Advisory".
+                      </p>
+                    </div>
+
+                    <div className="flex gap-3 text-xs leading-normal font-semibold text-slate-600 font-sans border-t border-slate-100 pt-4">
+                      <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-600 font-extrabold flex items-center justify-center shrink-0">2</div>
+                      <p>
+                        <strong className="text-brand-navy-950">Add to WhatsApp Business Status & Catalog:</strong> Open WhatsApp settings, select "Business Tools & Profile", click edit under "Website" field, and paste your social bio-link there.
+                      </p>
+                    </div>
+
+                    <div className="flex gap-3 text-xs leading-normal font-semibold text-slate-600 font-sans border-t border-slate-100 pt-4">
+                      <div className="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 font-extrabold flex items-center justify-center shrink-0">3</div>
+                      <p>
+                        <strong className="text-brand-navy-950">Add to Facebook Page Website:</strong> Navigate to your Page's "About" section and insert the main URL in the website link tab to drive visitor traffic straight into doorstep loan callbacks!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+          </div>
+        </main>
       ) : (
         /* STANDARD USER-FACING FRONTEND */
         <>
@@ -2086,7 +2713,7 @@ export default function App() {
                   {/* Trust Badge */}
                   <div className="inline-flex items-center gap-2.5 bg-blue-50 border border-blue-100 px-4 py-2 rounded-2xl text-brand-navy-700 text-sm font-extrabold shadow-sm">
                     <Award className="w-5 h-5 text-brand-navy-600 shrink-0" />
-                    <span>9 Years of Ahmedabad's Best Banking & Legal Mastery</span>
+                    <span>9 Years of Ahmedabad's Best Banking & Legal Mastery (Ahmedabad, Gujarat Only)</span>
                   </div>
 
                   <h1 className="font-display text-3xl sm:text-4xl lg:text-5xl font-black text-brand-navy-950 tracking-tight leading-tight animate-fade-in">
@@ -2094,12 +2721,12 @@ export default function App() {
                   </h1>
 
                   <p className="text-slate-600 text-lg md:text-xl leading-relaxed max-w-2xl font-semibold">
-                    With over nine years of bank loan department operations and document execution experience, <span className="text-brand-navy-600 font-black">SR Finserv</span> offers doorstep support for your legal contracts and home financing.
+                    With over nine years of bank loan department operations and document execution experience, <span className="text-brand-navy-600 font-black">SR Finserv</span> offers direct doorstep support for your legal contracts and home financing <span className="text-emerald-700 font-bold">exclusively in Ahmedabad, Gujarat</span>.
                   </p>
 
                   <div className="flex flex-col sm:flex-row gap-4.5 pt-2">
                     <button
-                      onClick={() => { setActiveTab('inquire'); }}
+                      onClick={() => { setShowInquiryModal(true); }}
                       className="bg-brand-navy-600 hover:bg-brand-navy-800 font-extrabold text-white font-sans px-5.5 py-3 rounded-xl text-sm transition-all shadow-md flex items-center justify-center gap-2"
                     >
                       <span>Inquire Call Back</span>
@@ -2131,238 +2758,411 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Right Frame Content - Interactive CTA Card */}
-                <div className="lg:col-span-5 bg-slate-50 border border-slate-200 p-8 sm:p-9 rounded-3xl shadow-xs relative" id="inquiry-form-section">
-                  <div className="absolute top-4 right-4 text-xs bg-blue-50 border border-blue-100 text-brand-navy-600 px-3 py-1 rounded-md font-bold uppercase tracking-wider">
-                    Fast response
+                {/* Right Frame Content - Premium Advisory Calling Card */}
+                <div className="lg:col-span-5 bg-gradient-to-br from-brand-navy-950 to-brand-navy-900 border border-brand-navy-800 p-8 sm:p-9 rounded-3xl shadow-xl relative text-white" id="advisor-calling-card">
+                  <div className="absolute top-4 right-4 text-[10px] bg-brand-gold-500/20 border border-brand-gold-500/30 text-brand-gold-300 px-3 py-1 rounded-md font-bold uppercase tracking-wider">
+                    Privileged Access
                   </div>
 
-                  <h3 className="font-display font-black text-xl text-brand-navy-950 mb-3 ml-0">Customer Requirement Form</h3>
-                  <p className="text-sm text-slate-600 mb-6 font-semibold">Enter basic contact requirements. Founded by <strong>Sanket Champaneri</strong>, we evaluate underwritings tailored strictly to your profile at your doorstep.</p>
-
-                  <form onSubmit={handleInquirySubmit} className="space-y-4">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Name</label>
-                      <input
-                        type="text"
-                        required
-                        className="w-full text-sm px-4 py-3.5 rounded-xl bg-white border border-slate-200 text-brand-navy-950 focus:outline-none focus:border-brand-navy-600 shadow-xs font-semibold"
-                        placeholder="e.g. Sanket Champaneri"
-                        value={formData.fullName}
-                        onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                      />
+                  <div className="space-y-6">
+                    <div>
+                      <span className="text-3xl">💼</span>
+                      <h3 className="font-display font-black text-2xl text-white mt-3 leading-tight">Ahmedabad's Priority Doorstep Consulting</h3>
+                      <p className="text-slate-300 text-xs mt-2 leading-relaxed">
+                        No banks visits or tedious queues. Since 2017, we have facilitated document verification, direct bank file representation, and compliant notary drafts at your door.
+                      </p>
                     </div>
 
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Mo. Number</label>
-                      <input
-                        type="tel"
-                        required
-                        className="w-full text-sm px-4 py-3.5 rounded-xl bg-white border border-slate-200 text-brand-navy-950 focus:outline-none focus:border-brand-navy-600 shadow-xs font-semibold"
-                        placeholder="e.g. +91 84879 74404"
-                        value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Email id</label>
-                      <input
-                        type="email"
-                        required
-                        className="w-full text-sm px-4 py-3.5 rounded-xl bg-white border border-slate-200 text-brand-navy-950 focus:outline-none focus:border-brand-navy-600 shadow-xs font-semibold"
-                        placeholder="e.g. sanketbhavsar27@gmail.com"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Requirement</label>
-                      <select
-                        className="w-full text-sm px-4 py-3.5 rounded-xl bg-white border border-slate-200 text-brand-navy-950 focus:outline-none focus:border-brand-navy-600 shadow-xs font-semibold"
-                        value={formData.requirement}
-                        onChange={(e) => setFormData({ ...formData, requirement: e.target.value as any })}
-                      >
-                        <option value="Loan services">Loan services</option>
-                        <option value="Insurance services">Insurance services</option>
-                        <option value="Legal services">Legal services</option>
-                      </select>
-                    </div>
-
-                    <button
-                      type="submit"
-                      className="w-full bg-brand-navy-600 hover:bg-brand-navy-800 text-white font-black text-sm py-4 rounded-xl transition-all shadow-md mt-6"
-                    >
-                      Submit Customer Requirement
-                    </button>
-                  </form>
-
-                  {formSubmitted && (
-                    <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-xl text-green-950 text-sm flex items-start gap-2.5">
-                      <CheckCircle className="w-5 h-5 shrink-0 mt-0.5 text-green-600" />
-                      <div>
-                        <p className="font-bold">Inquiry logged successfully!</p>
-                        <p className="text-xs text-green-800 mt-1">We have logged your request. Sanket Champaneri or our doorstep legal specialist will call you back within 2 hours.</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-              </div>
-            </div>
-          </section>
-
-          {/* TRIPLE CORE ADVISORY SEGMENTS */}
-          <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24" id="services-section">
-            <div className="text-center max-w-3xl mx-auto mb-16 space-y-3">
-              <span className="text-xs uppercase tracking-widest font-extrabold text-brand-gold-600 block">Expertise Catalog</span>
-              <h2 className="font-display text-2xl md:text-3xl font-extrabold text-brand-navy-950">
-                Custom Solutions for Every Client Scenario
-              </h2>
-              <p className="text-sm text-slate-500">
-                Whether you need secure multi-bank property financing, personal or commercial insurance protection, or solid legal title clearance certificates, we provide bespoke, compliant advisory.
-              </p>
-            </div>
-
-            {/* Split Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              
-              {/* Financial Services */}
-              <div className="space-y-6">
-                <div className="flex items-center gap-3 pb-4 border-b border-brand-navy-100">
-                  <div className="p-3 bg-blue-50 text-blue-700 rounded-2xl border border-blue-100">
-                    <Briefcase className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="font-display font-bold text-lg text-brand-navy-900">Financial Services</h3>
-                    <p className="text-[11px] text-slate-500">Comprehensive lending partnerships with leading banks & NBFCs</p>
-                    <div className="flex items-center gap-1 mt-1 text-[10px] text-amber-600 font-bold bg-amber-50 border border-amber-100 rounded-lg px-2 py-0.5 w-fit">
-                      <Star className="w-3 h-3 fill-brand-gold-500 text-brand-gold-500 shrink-0" />
-                      <span>{loanRatings.avg} / 5 ({loanRatings.count} ratings)</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  {LOAN_SERVICES.map((loan) => (
-                    <div
-                      key={loan.id}
-                      onClick={() => handlePrefillInquiry('loan', loan.title)}
-                      className="group cursor-pointer bg-white p-4.5 rounded-2xl border border-brand-navy-100 shadow-xs hover:shadow-md hover:border-brand-navy-300 transition-all flex items-center justify-between"
-                    >
+                    <div className="space-y-3.5 pt-3 border-t border-brand-navy-800">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-xs group-hover:scale-105 transition-transform">
-                          🏦
-                        </div>
-                        <span className="font-bold text-sm text-brand-navy-950 font-display group-hover:text-blue-600 transition-colors">{loan.title}</span>
+                        <div className="w-8 h-8 rounded-lg bg-brand-navy-800 flex items-center justify-center text-sm font-bold text-brand-gold-400">✓</div>
+                        <span className="text-xs text-slate-200 font-bold">Exclusively Ahmedabad, Gujarat coverage</span>
                       </div>
-                      <span className="text-[10px] font-extrabold text-blue-600 uppercase tracking-wider bg-blue-50 px-2.5 py-1 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-all">
-                        Inquire
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-brand-navy-800 flex items-center justify-center text-sm font-bold text-brand-gold-400">✓</div>
+                        <span className="text-xs text-slate-200 font-bold">7+ Years Core Underwriting department insights</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-brand-navy-800 flex items-center justify-center text-sm font-bold text-brand-gold-400">✓</div>
+                        <span className="text-xs text-slate-200 font-bold">Hassle-free doorstep collection & sign-off</span>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              </div>
 
-              {/* Legal Documentation & Property Search */}
-              <div className="space-y-6">
-                <div className="flex items-center gap-3 pb-4 border-b border-brand-navy-100">
-                  <div className="p-3 bg-purple-50 text-purple-700 rounded-2xl border border-purple-100">
-                    <FileText className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="font-display font-bold text-lg text-brand-navy-900">Legal Services</h3>
-                    <p className="text-[11px] text-slate-500">Registered drafts, title audits, and formal opinions</p>
-                    <div className="flex items-center gap-1 mt-1 text-[10px] text-amber-600 font-bold bg-amber-50 border border-amber-100 rounded-lg px-2 py-0.5 w-fit">
-                      <Star className="w-3 h-3 fill-brand-gold-500 text-brand-gold-500 shrink-0" />
-                      <span>{legalRatings.avg} / 5 ({legalRatings.count} ratings)</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  {/* Premium Doorstep Notary Highlight */}
-                  <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200/60 rounded-2xl p-4 text-left flex items-start gap-3 shadow-xs">
-                    <span className="text-lg shrink-0 mt-0.5">🖋️</span>
-                    <div className="space-y-1">
-                      <p className="font-extrabold text-xs text-purple-950">Doorstep Notary Service</p>
-                      <p className="text-[11px] text-slate-600 leading-relaxed font-semibold">
-                        As per your requirement, our executive will come to your doorstep and provide professional notary services. Save time on travel and queues!
+                    <div className="pt-4 space-y-3">
+                      <button
+                        onClick={() => setShowInquiryModal(true)}
+                        className="w-full bg-brand-gold-500 hover:bg-brand-gold-400 text-brand-navy-950 font-black text-xs py-4 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <span>📋</span> Open Requirement Form
+                      </button>
+                      <p className="text-[10px] text-center text-slate-400 font-medium">
+                        Alternatively, access via the top-right <strong className="text-slate-300">Three-Line Menu</strong>
                       </p>
                     </div>
                   </div>
-
-                  {LEGAL_SERVICES.map((legal) => (
-                    <div
-                      key={legal.id}
-                      onClick={() => handlePrefillInquiry('legal', legal.title)}
-                      className="group cursor-pointer bg-white p-4.5 rounded-2xl border border-brand-navy-100 shadow-xs hover:shadow-md hover:border-brand-navy-300 transition-all flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center font-bold text-xs group-hover:scale-105 transition-transform">
-                          {legal.id === 'sale-deed' && '📜'}
-                          {legal.id === 'rent-agreement' && '🏠'}
-                          {legal.id === 'agreement-to-sale' && '🤝'}
-                          {legal.id === 'power-of-attorney' && '✍️'}
-                          {legal.id === 'affidavit' && '📋'}
-                          {legal.id === 'notary-services' && '🖋️'}
-                        </div>
-                        <span className="font-bold text-sm text-brand-navy-950 font-display group-hover:text-purple-600 transition-colors">{legal.title}</span>
-                      </div>
-                      <span className="text-[10px] font-extrabold text-purple-600 uppercase tracking-wider bg-purple-50 px-2.5 py-1 rounded-lg group-hover:bg-purple-600 group-hover:text-white transition-all">
-                        Inquire
-                      </span>
-                    </div>
-                  ))}
                 </div>
+
+              </div>
+            </div>
+          </section>
+
+          <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24" id="services-section">
+            <div className="text-center max-w-3xl mx-auto mb-12 space-y-3">
+              <span className="text-xs uppercase tracking-widest font-extrabold text-brand-gold-600 block">Premium Expertise Hub</span>
+              <h2 className="font-display text-2xl md:text-3.5xl font-extrabold text-brand-navy-950 tracking-tight animate-fade-in">
+                Bespoke Doorstep Solutions in Ahmedabad
+              </h2>
+              <p className="text-sm text-slate-500 font-semibold leading-relaxed">
+                Click any core segment directly below to reveal its verified financial services, doorstep stamp registries, and protective asset coverages.
+              </p>
+            </div>
+
+            {/* Premium Interactive Service Accordions */}
+            <div id="services-accordions-group" className="space-y-6">
+              {/* Financial & Loans Accordion Card */}
+              <div id="accordion-loans" className={`overflow-hidden transition-all duration-300 rounded-3xl border ${
+                isLoanExpanded 
+                  ? 'bg-blue-50/15 border-blue-300 shadow-md ring-2 ring-blue-500/10' 
+                  : 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-md shadow-xs'
+              }`}>
+                {/* Header Click Target */}
+                <button
+                  type="button"
+                  id="accordion-loans-trigger"
+                  onClick={() => setIsLoanExpanded(!isLoanExpanded)}
+                  className="w-full text-left p-6 sm:p-8 flex items-center justify-between cursor-pointer select-none transition-colors hover:bg-slate-50/60"
+                >
+                  <div className="flex items-center gap-4.5">
+                    <div className={`p-3 rounded-2xl border transition-all ${
+                      isLoanExpanded 
+                        ? 'bg-blue-600 text-white border-blue-500 scale-105' 
+                        : 'bg-blue-50 text-blue-700 border-blue-100'
+                    }`}>
+                      <Briefcase className="w-6 h-6 shrink-0" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <h3 className="font-display font-black text-lg sm:text-xl text-brand-navy-950">
+                          Financial & Loan Services
+                        </h3>
+                        <div className="flex items-center gap-1 text-[10px] text-amber-600 font-black bg-amber-50 border border-amber-100 rounded-md px-2 py-0.5">
+                          <Star className="w-3 h-3 fill-brand-gold-500 text-brand-gold-500 shrink-0" />
+                          <span>{loanRatings.avg} ({loanRatings.count} reviews)</span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-500 font-semibold mt-1">
+                        Direct files representation with leading national banks & NBFCs. Competitive rates from 7.20%.
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3 shrink-0 ml-4">
+                    <span className="hidden sm:inline-block text-[10px] font-black uppercase tracking-wider text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">
+                      {isLoanExpanded ? 'Hide Options ▴' : 'Click to Expand ▾'}
+                    </span>
+                    <div className={`w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 transition-transform duration-300 ${isLoanExpanded ? 'rotate-180 bg-blue-100 text-blue-700 border-blue-200' : ''}`}>
+                      ▾
+                    </div>
+                  </div>
+                </button>
+
+                {/* Expanded Content Area */}
+                {isLoanExpanded && (
+                  <div className="border-t border-slate-150 p-6 sm:p-8 bg-white/70 animate-fade-in" id="accordion-loans-content">
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                      {/* Left Side Info Banner */}
+                      <div className="lg:col-span-5 bg-gradient-to-br from-blue-950 to-brand-navy-900 border border-blue-900 text-white p-7 sm:p-8 rounded-2xl shadow-md">
+                        <span className="text-3xl">🏦</span>
+                        <h4 className="font-display font-black text-xl text-white mt-3 leading-tight font-sans">
+                          Why Choose Our Financial Desk?
+                        </h4>
+                        <p className="text-xs text-slate-300 leading-relaxed mt-2.5">
+                          We bypass exhausting bank loops and standard procedural queues in Gujarat. Our seasoned experts draft and represent direct files with top national and private institutes for maximum success.
+                        </p>
+
+                        <div className="space-y-3 border-t border-blue-900/60 pt-4.5 mt-4.5">
+                          <div className="flex items-start gap-2.5">
+                            <span className="text-emerald-400 font-bold shrink-0 mt-0.5">✓</span>
+                            <span className="text-[11.5px] text-slate-205 font-bold font-display">Comprehensive Home & Commercial Loans</span>
+                          </div>
+                          <div className="flex items-start gap-2.5">
+                            <span className="text-emerald-400 font-bold shrink-0 mt-0.5">✓</span>
+                            <span className="text-[11.5px] text-slate-205 font-bold font-display">Fast-tracked approval loops on complex ownership papers</span>
+                          </div>
+                        </div>
+
+                        <div className="bg-blue-900/40 border border-blue-800 rounded-xl p-3.5 mt-5">
+                          <p className="text-[11px] text-blue-200 leading-relaxed font-semibold">
+                            💡 <strong>Direct Operations Support:</strong> Over 9 years of bank loan department experience with instant doorstep verification support.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Right Side Services Grid */}
+                      <div className="lg:col-span-7 space-y-4">
+                        <div className="bg-blue-50/70 border border-blue-100 rounded-xl p-4">
+                          <p className="text-xs text-brand-navy-950 font-bold leading-relaxed flex items-center gap-2">
+                            <span>💡</span>
+                            <span>Click any active financing catalog below to prefill your doorstep requirement form:</span>
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5" id="loan-items-grid">
+                          {LOAN_SERVICES.map((loan) => (
+                            <div
+                              key={loan.id}
+                              id={`loan-srv-${loan.id}`}
+                              onClick={() => handlePrefillInquiry('loan', loan.title)}
+                              className="group cursor-pointer bg-white p-4.5 rounded-2xl border border-slate-200 hover:border-blue-500 shadow-xs hover:shadow-md transition-all flex items-center justify-between"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-sm group-hover:scale-105 transition-transform shrink-0">
+                                  💵
+                                </div>
+                                <span className="block font-black text-xs text-brand-navy-950 font-display group-hover:text-blue-600 transition-colors">
+                                  {loan.title}
+                                </span>
+                              </div>
+                              <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-2.5 py-1.5 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-all shrink-0">
+                                Apply
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Comprehensive Insurance Advisory */}
-              <div className="space-y-6">
-                <div className="flex items-center gap-3 pb-4 border-b border-brand-navy-100">
-                  <div className="p-3 bg-emerald-50 text-emerald-700 rounded-2xl border border-emerald-100">
-                    <Shield className="w-6 h-6" />
+              {/* Legal & Property Search Accordion Card */}
+              <div id="accordion-legal" className={`overflow-hidden transition-all duration-300 rounded-3xl border ${
+                isLegalExpanded 
+                  ? 'bg-purple-50/15 border-purple-300 shadow-md ring-2 ring-purple-500/10' 
+                  : 'bg-white border-slate-200 hover:border-purple-300 hover:shadow-md shadow-xs'
+              }`}>
+                {/* Header Click Target */}
+                <button
+                  type="button"
+                  id="accordion-legal-trigger"
+                  onClick={() => setIsLegalExpanded(!isLegalExpanded)}
+                  className="w-full text-left p-6 sm:p-8 flex items-center justify-between cursor-pointer select-none transition-colors hover:bg-slate-55/40"
+                >
+                  <div className="flex items-center gap-4.5">
+                    <div className={`p-3 rounded-2xl border transition-all ${
+                      isLegalExpanded 
+                        ? 'bg-purple-600 text-white border-purple-500 scale-105' 
+                        : 'bg-purple-50 text-purple-700 border-purple-100'
+                    }`}>
+                      <FileText className="w-6 h-6 shrink-0" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <h3 className="font-display font-black text-lg sm:text-xl text-brand-navy-950">
+                          Legal Compliance & Document Drafting
+                        </h3>
+                        <div className="flex items-center gap-1 text-[10px] text-amber-600 font-black bg-amber-50 border border-amber-100 rounded-md px-2 py-0.5">
+                          <Star className="w-3 h-3 fill-brand-gold-500 text-brand-gold-500 shrink-0" />
+                          <span>{legalRatings.avg} ({legalRatings.count} reviews)</span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-500 font-semibold mt-1">
+                        Professional sub-registrar slot planning, title certificate clearance, and doorstep registered notary drafts.
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3 shrink-0 ml-4">
+                    <span className="hidden sm:inline-block text-[10px] font-black uppercase tracking-wider text-purple-600 bg-purple-50 px-3 py-1.5 rounded-lg border border-purple-100">
+                      {isLegalExpanded ? 'Hide Options ▴' : 'Click to Expand ▾'}
+                    </span>
+                    <div className={`w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 transition-transform duration-300 ${isLegalExpanded ? 'rotate-180 bg-purple-100 text-purple-700 border-purple-200' : ''}`}>
+                      ▾
+                    </div>
+                  </div>
+                </button>
+
+                {/* Expanded Content Area with smooth transition */}
+                {isLegalExpanded && (
+                  <div className="border-t border-slate-150 p-6 sm:p-8 bg-white/70 animate-fade-in" id="accordion-legal-content">
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                      {/* Left Side Info Banner */}
+                      <div className="lg:col-span-5 bg-gradient-to-br from-purple-950 to-indigo-950 border border-purple-900 text-white p-7 sm:p-8 rounded-2xl shadow-md space-y-5">
+                        <div>
+                          <span className="text-3xl">📜</span>
+                          <h4 className="font-display font-black text-xl text-white mt-3 leading-tight font-sans">
+                            Verified Stamp & Drafting Desk
+                          </h4>
+                          <p className="text-xs text-slate-300 leading-relaxed mt-2.5">
+                            Specialized legal draftsmen ready to support your property transfer notarizations and government records search. We ensure solid title verification checks.
+                          </p>
+                        </div>
+
+                        {/* Doorstep Notary Bullet */}
+                        <div className="bg-purple-900/30 border border-purple-800/80 rounded-xl p-4 flex items-start gap-3">
+                          <span className="text-base shrink-0 mt-0.5">🖋️</span>
+                          <div>
+                            <p className="font-bold text-xs text-purple-300 font-display">Doorstep Notary Execution</p>
+                            <p className="text-[10.5px] text-slate-300 leading-relaxed font-semibold mt-1">
+                              Save hours of standing in municipal queues. We coordinate registered notary slots, stamp duty execution, and sworn affidavits safely at your home.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right Side Services Grid */}
+                      <div className="lg:col-span-7 space-y-4">
+                        <div className="bg-purple-50 border border-purple-100 rounded-xl p-4">
+                          <p className="text-xs text-brand-navy-950 font-bold leading-relaxed flex items-center gap-2">
+                            <span>💡</span>
+                            <span>Click any deed template to automatically prefill and review your format specifications:</span>
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5" id="legal-items-grid">
+                          {LEGAL_SERVICES.map((legal) => (
+                            <div
+                              key={legal.id}
+                              id={`legal-srv-${legal.id}`}
+                              onClick={() => handlePrefillInquiry('legal', legal.title)}
+                              className="group cursor-pointer bg-white p-4.5 rounded-2xl border border-slate-200 hover:border-purple-500 shadow-xs hover:shadow-md transition-all flex items-center justify-between"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center font-bold text-sm group-hover:scale-105 transition-transform shrink-0">
+                                  {legal.id === 'sale-deed' && '📜'}
+                                  {legal.id === 'rent-agreement' && '🏠'}
+                                  {legal.id === 'agreement-to-sale' && '🤝'}
+                                  {legal.id === 'power-of-attorney' && '✍️'}
+                                  {legal.id === 'affidavit' && '📋'}
+                                  {legal.id === 'notary-services' && '🖋️'}
+                                </div>
+                                <span className="block font-black text-xs text-brand-navy-950 font-display group-hover:text-purple-600 transition-colors">
+                                  {legal.title}
+                                </span>
+                              </div>
+                              <span className="text-[9px] font-black text-purple-600 bg-purple-50 px-2.5 py-1.5 rounded-lg group-hover:bg-purple-600 group-hover:text-white transition-all shrink-0">
+                                Draft
+                              </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Comprehensive Asset Protection & Insurance Section Accordion Card */}
+            <div id="accordion-insurance" className={`overflow-hidden transition-all duration-300 rounded-3xl border ${
+              isInsuranceExpanded 
+                ? 'bg-emerald-50/20 border-emerald-300 shadow-md ring-2 ring-emerald-500/10' 
+                : 'bg-white border-slate-200 hover:border-emerald-300 hover:shadow-md shadow-xs'
+            }`}>
+              {/* Header Click Target */}
+              <button
+                type="button"
+                id="accordion-insurance-trigger"
+                onClick={() => setIsInsuranceExpanded(!isInsuranceExpanded)}
+                className="w-full text-left p-6 sm:p-8 flex items-center justify-between cursor-pointer select-none transition-colors hover:bg-slate-55/40"
+              >
+                <div className="flex items-center gap-4.5">
+                  <div className={`p-3 rounded-2xl border transition-all ${
+                    isInsuranceExpanded 
+                      ? 'bg-emerald-600 text-white border-emerald-500 scale-105' 
+                      : 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                  }`}>
+                    <Shield className="w-6 h-6 shrink-0" />
                   </div>
                   <div>
-                    <h3 className="font-display font-bold text-lg text-brand-navy-900">Insurance Solutions</h3>
-                    <p className="text-[11px] text-slate-500">Life and General Insurance policies with leading Indian providers</p>
-                    <div className="flex items-center gap-1 mt-1 text-[10px] text-amber-600 font-bold bg-amber-50 border border-amber-100 rounded-lg px-2 py-0.5 w-fit">
-                      <Star className="w-3 h-3 fill-brand-gold-500 text-brand-gold-500 shrink-0" />
-                      <span>{insuranceRatings.avg} / 5 ({insuranceRatings.count} ratings)</span>
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <h3 className="font-display font-black text-lg sm:text-xl text-brand-navy-950">
+                        Asset Protection & Insurance Solutions
+                      </h3>
+                      <div className="flex items-center gap-1 text-[10px] text-amber-600 font-black bg-amber-50 border border-amber-100 rounded-md px-2 py-0.5">
+                        <Star className="w-3 h-3 fill-brand-gold-500 text-brand-gold-500 shrink-0" />
+                        <span>{insuranceRatings.avg} ({insuranceRatings.count} reviews)</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500 font-semibold mt-1">
+                      Term policies, commercial asset shields, and health underwriting with leading Indian coverage networks.
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-3 shrink-0 ml-4">
+                  <span className="hidden sm:inline-block text-[10px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100">
+                    {isInsuranceExpanded ? 'Hide Options ▴' : 'Click to Expand ▾'}
+                  </span>
+                  <div className={`w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 transition-transform duration-300 ${isInsuranceExpanded ? 'rotate-180 bg-emerald-100 text-emerald-700 border-emerald-250' : ''}`}>
+                    ▾
+                  </div>
+                </div>
+              </button>
+
+              {/* Expanded Content Area with smooth transition */}
+              {isInsuranceExpanded && (
+                <div className="border-t border-slate-150 p-6 sm:p-8 bg-white/70 animate-fade-in" id="accordion-insurance-content">
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                    {/* Left Side Info Banner */}
+                    <div className="lg:col-span-5 bg-gradient-to-br from-emerald-950 to-slate-900 border border-emerald-900 text-white p-7 sm:p-8 rounded-2xl shadow-md">
+                      <span className="text-3xl">🛡️</span>
+                      <h4 className="font-display font-black text-xl text-white mt-3 leading-tight font-sans">
+                        Sovereign Protection Advisory
+                      </h4>
+                      <p className="text-xs text-slate-300 leading-relaxed mt-2.5">
+                        Protect your hard-earned investments with comprehensive premium insurance plans. Partnered directly with high claims-ratio operators in India to align terms with your active financial profile.
+                      </p>
+
+                      <div className="space-y-3.5 border-t border-emerald-900/60 pt-4.5 mt-4.5">
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-emerald-400 font-bold shrink-0">✓</span>
+                          <span className="text-xs text-slate-200 font-bold font-display">Comprehensive term & home loan coverage shields</span>
+                        </div>
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-emerald-400 font-bold shrink-0">✓</span>
+                          <span className="text-xs text-slate-200 font-bold font-display">Doorstep documentation collection & claims tracking</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Side Services Grid */}
+                    <div className="lg:col-span-7 space-y-4">
+                      <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4">
+                        <p className="text-xs text-brand-navy-950 font-bold leading-relaxed flex items-center gap-2">
+                          <span>💡</span>
+                          <span>Click any coverage configuration below to request direct premium quotation:</span>
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5" id="insurance-items-grid">
+                        {INSURANCE_SERVICES.map((ins) => (
+                          <div
+                            key={ins.id}
+                            id={`ins-srv-${ins.id}`}
+                            onClick={() => handlePrefillInquiry('insurance', ins.title)}
+                            className="group cursor-pointer bg-white p-5 rounded-2xl border border-slate-200 hover:border-emerald-500 shadow-xs hover:shadow-md transition-all flex items-center justify-between"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-sm group-hover:scale-105 transition-transform shrink-0">
+                                {ins.id === 'general-insurance' ? '🛡️' : '❤️'}
+                              </div>
+                              <span className="block font-black text-xs text-brand-navy-950 font-display group-hover:text-emerald-600 transition-colors">
+                                {ins.title}
+                              </span>
+                            </div>
+                            <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-2.5 py-1.5 rounded-lg group-hover:bg-emerald-600 group-hover:text-white transition-all shrink-0">
+                              Protect
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
-
-                <div className="space-y-3">
-                  {INSURANCE_SERVICES.map((ins) => (
-                    <div
-                      key={ins.id}
-                      onClick={() => handlePrefillInquiry('insurance', ins.title)}
-                      className="group cursor-pointer bg-white p-4.5 rounded-2xl border border-brand-navy-100 shadow-xs hover:shadow-md hover:border-brand-navy-300 transition-all flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-xs group-hover:scale-105 transition-transform">
-                          {ins.id === 'general-insurance' ? '🛡️' : '❤️'}
-                        </div>
-                        <span className="font-bold text-sm text-brand-navy-950 font-display group-hover:text-emerald-600 transition-colors">{ins.title}</span>
-                      </div>
-                      <span className="text-[10px] font-extrabold text-emerald-600 uppercase tracking-wider bg-emerald-50 px-2.5 py-1 rounded-lg group-hover:bg-emerald-600 group-hover:text-white transition-all">
-                        Inquire
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
+              )}
             </div>
-
-            {/* Smart Document Checklist Selector Applet Segment */}
-            <div className="mt-16 max-w-4xl mx-auto">
-              <LoanChecklistDownload />
-            </div>
-
-          </section>
+          </div>
+        </section>
 
           {/* CLIENT TESTIMONIALS & REVIEWS SECTION */}
           <section className="py-16 md:py-20 bg-gradient-to-b from-white to-brand-navy-50/20 border-b border-brand-navy-100" id="testimonials-section">
@@ -2421,9 +3221,29 @@ export default function App() {
                         </div>
 
                         {/* Review message text */}
-                        <p className="text-slate-600 text-xs leading-relaxed italic font-sans">
-                          "{item.testimonialText}"
-                        </p>
+                        <div className="relative pt-2">
+                          <span className="absolute -top-3.5 -left-1.5 text-4xl text-brand-gold-300 font-serif select-none opacity-50">“</span>
+                          <p className="text-slate-850 text-[13.5px] leading-relaxed font-semibold italic font-sans relative z-10 pl-1">
+                            "{item.testimonialText}"
+                          </p>
+                        </div>
+
+                        {/* Advisor Reply Speech Bubble */}
+                        {item.advisorReply && (
+                          <div className="mt-3.5 p-2.5 bg-slate-50/75 border border-slate-100 rounded-2xl text-[10px] text-slate-500 space-y-1 relative">
+                            <div className="absolute -top-1.5 left-5 w-3 h-3 bg-slate-50/75 border-t border-l border-slate-100 rotate-45" />
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-4 h-4 rounded-full bg-brand-navy-850 flex items-center justify-center text-[7px] text-white font-extrabold shrink-0">
+                                S
+                              </div>
+                              <span className="font-bold text-brand-navy-900 text-[9px]">Sanket Champaneri</span>
+                              <span className="px-1 py-0.5 rounded-sm bg-brand-navy-50 text-[7px] text-brand-navy-700 font-bold uppercase tracking-wider">Advisor</span>
+                            </div>
+                            <p className="italic pl-5.5 font-medium leading-relaxed text-slate-500">
+                              "{item.advisorReply}"
+                            </p>
+                          </div>
+                        )}
                       </div>
 
                       <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
@@ -2587,49 +3407,6 @@ export default function App() {
             </div>
           </section>
 
-          {/* DYNAMIC COLLAPSIBLE FAQs SECTION */}
-          <section className="bg-white/85 py-16 md:py-20 border-t border-brand-navy-100" id="faqs-section">
-            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-              
-              <div className="text-center mb-12 space-y-3">
-                <span className="text-xs uppercase tracking-widest font-extrabold text-brand-gold-600 block">Frequently Asked Questions</span>
-                <h2 className="font-display text-2.5xl font-extrabold text-brand-navy-950">
-                  Guidance on Loans, Stamp Duty & Registration Laws
-                </h2>
-                <p className="text-xs text-slate-500 max-w-lg mx-auto">
-                  Understand critical process parameters of land registration, title opinion reports, and multi-bank underwriting regulations.
-                </p>
-              </div>
-
-              <div className="space-y-3.5">
-                {FAQS.map((faq, index) => {
-                  const isOpen = faqOpenIndex === index;
-                  return (
-                    <div
-                      key={index}
-                      className="border border-brand-navy-100 rounded-2xl bg-white p-4 transition-all"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setFaqOpenIndex(isOpen ? null : index)}
-                        className="w-full flex justify-between items-center text-left font-display font-semibold text-brand-navy-900 text-sm md:text-base focus:outline-none"
-                      >
-                        <span>{faq.question}</span>
-                        {isOpen ? <ChevronUp className="w-4 h-4 text-brand-gold-600" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-                      </button>
-                      
-                      {isOpen && (
-                        <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-600 leading-relaxed font-sans">
-                          {faq.answer}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-            </div>
-          </section>
         </>
       )}
 
@@ -2650,7 +3427,7 @@ export default function App() {
               </div>
             </div>
             <p className="text-xs text-slate-500 leading-relaxed font-semibold">
-              Serving property developers, individual buyers, and aspiring business entrepreneurs in Ahmedabad with over nine combined years of major bank loan officer expertise and active doorstep legal solutions.
+              Serving property developers, individual buyers, and aspiring business entrepreneurs exclusively in Ahmedabad, Gujarat, with over nine combined years of major bank loan officer expertise and active doorstep legal solutions.
             </p>
           </div>
 
@@ -2661,6 +3438,8 @@ export default function App() {
                 <button
                   onClick={() => {
                     setActiveTab('services');
+                    setActiveServiceSubTab('loan');
+                    setIsLoanExpanded(true);
                     setIsCrmMode(false);
                     setTimeout(() => {
                       const el = document.getElementById('services-section');
@@ -2676,6 +3455,8 @@ export default function App() {
                 <button
                   onClick={() => {
                     setActiveTab('services');
+                    setActiveServiceSubTab('loan');
+                    setIsLoanExpanded(true);
                     setIsCrmMode(false);
                     setTimeout(() => {
                       const el = document.getElementById('services-section');
@@ -2691,6 +3472,8 @@ export default function App() {
                 <button
                   onClick={() => {
                     setActiveTab('services');
+                    setActiveServiceSubTab('legal');
+                    setIsLegalExpanded(true);
                     setIsCrmMode(false);
                     setTimeout(() => {
                       const el = document.getElementById('services-section');
@@ -2706,6 +3489,8 @@ export default function App() {
                 <button
                   onClick={() => {
                     setActiveTab('services');
+                    setActiveServiceSubTab('legal');
+                    setIsLegalExpanded(true);
                     setIsCrmMode(false);
                     setTimeout(() => {
                       const el = document.getElementById('services-section');
@@ -2761,10 +3546,23 @@ export default function App() {
           <div>
             &copy; {new Date().getFullYear()} SR Finserv. All Rights Reserved.
           </div>
-          <div className="flex gap-4 font-mono text-[10px] text-slate-400">
+          <div className="flex gap-4 font-mono text-[10px] text-slate-400 items-center">
             <span>Founded by Sanket Champaneri</span>
             <span>•</span>
-            <span>Secure SSL Encrypted</span>
+            <span 
+              className="cursor-default select-none hover:text-slate-500 transition-colors"
+              onClick={() => {
+                const nextCount = footerClickCount + 1;
+                if (nextCount >= 5) {
+                  triggerCrmPortalLogin();
+                } else {
+                  setFooterClickCount(nextCount);
+                }
+              }}
+              title="State encryption status active"
+            >
+              Secure SSL Encrypted
+            </span>
           </div>
         </div>
       </footer>
@@ -2853,6 +3651,381 @@ export default function App() {
           <Sparkles className="w-3.5 h-3.5 text-white/80 hidden sm:inline-block animate-pulse shrink-0" />
         </a>
       </div>
+
+      {/* ADVISOR CRM SECURE LOGIN MODAL */}
+      {showCrmLoginModal && (
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-slate-950/60 backdrop-blur-md" 
+            onClick={() => setShowCrmLoginModal(false)}
+          />
+          
+          {/* Modal Container */}
+          <div className="relative bg-white border border-slate-200/80 w-full max-w-md rounded-3xl shadow-[0_24px_50px_rgba(15,23,42,0.18)] p-6 sm:p-8 overflow-hidden animate-[scaleIn_0.25s_ease-out]">
+            {/* Header Lock Icon Ring */}
+            <div className="flex flex-col items-center text-center space-y-4 mb-6">
+              <div className="w-14 h-14 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-brand-navy-600 shadow-xs">
+                <Lock className="w-6 h-6 text-brand-navy-600 animate-[pulse_2s_infinite]" />
+              </div>
+              <div>
+                <h3 className="font-display text-xl font-extrabold text-brand-navy-950">Advisor Security Portal</h3>
+                <p className="text-xs text-slate-500 font-semibold mt-1">
+                  Private Access for Sanket Champaneri (SR Finserv)
+                </p>
+              </div>
+            </div>
+
+            {/* Input Form */}
+            <form 
+              onSubmit={(e) => {
+                e.preventDefault();
+                // Check passcode
+                if (crmPasscodeInput === '8487' || crmPasscodeInput === '2712') {
+                  setIsCrmAuthenticated(true);
+                  setIsCrmMode(true);
+                  setShowCrmLoginModal(false);
+                  setCrmPasscodeInput('');
+                  setCrmLoginError('');
+                  // Show success toast
+                  const id = Date.now();
+                  setToasts(prev => [
+                    ...prev, 
+                    { 
+                      id, 
+                      title: 'Welcome back, Advisor!', 
+                      message: 'Secure CRM Portal successfully unlocked.', 
+                      type: 'success' 
+                    }
+                  ]);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                } else {
+                  setCrmLoginError('Incorrect PIN code. Please try again.');
+                  setCrmPasscodeInput('');
+                }
+              }}
+              className="space-y-5"
+            >
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block text-center">
+                  Enter 4-Digit Advisor PIN
+                </label>
+                <input
+                  type="password"
+                  placeholder="••••"
+                  maxLength={4}
+                  value={crmPasscodeInput}
+                  onChange={(e) => {
+                    // Only accept numbers
+                    const val = e.target.value.replace(/\D/g, '');
+                    setCrmPasscodeInput(val);
+                    if (crmLoginError) setCrmLoginError('');
+                  }}
+                  className="w-full text-center text-3xl font-mono tracking-widest p-3 bg-slate-50 rounded-2xl border-2 border-slate-200/80 text-brand-navy-950 focus:border-brand-navy-600 focus:bg-white outline-none transition-all"
+                  autoFocus
+                  required
+                />
+              </div>
+
+              {crmLoginError && (
+                <p className="text-xs text-rose-500 font-bold text-center bg-rose-50 border border-rose-100 p-2.5 rounded-xl">
+                  ⚠️ {crmLoginError}
+                </p>
+              )}
+
+              <p className="text-[10px] text-slate-400 font-medium text-center leading-relaxed">
+                Authorized device logging is active. Unrecognized login attempts are recorded for compliance audit.
+              </p>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCrmLoginModal(false)}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl font-bold text-xs transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-brand-navy-950 hover:bg-brand-navy-900 text-white py-3 rounded-xl font-bold text-xs shadow-xs transition-colors"
+                >
+                  Unlock Portal
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* PROFESSIONAL DOCUMENT CHECKLIST MODAL */}
+      {showDocumentChecklistModal && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-slate-950/60 backdrop-blur-md transition-opacity duration-300" 
+            onClick={() => setShowDocumentChecklistModal(false)}
+          />
+          
+          {/* Modal Container */}
+          <div className="relative bg-white border border-slate-200/80 w-full max-w-4xl rounded-3xl shadow-[0_24px_50px_rgba(15,23,42,0.22)] flex flex-col max-h-[90vh] overflow-hidden animate-[scaleIn_0.25s_ease-out]">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
+                  <FileCheck className="w-5 h-5 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="font-display text-lg font-extrabold text-brand-navy-950">
+                    Smart Mortgage & Document Planner
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-semibold">
+                    Interactive checklists tailored by Sanket Champaneri to align with banking standards
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowDocumentChecklistModal(false)}
+                className="w-10 h-10 rounded-xl bg-white border border-slate-200/60 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all cursor-pointer shadow-xs active:scale-95"
+                title="Close Checklist"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content - Scrollable container for LoanChecklistDownload */}
+            <div className="flex-1 overflow-y-auto p-6 bg-white shrink-min">
+              <div className="pb-4 mb-4 border-b border-slate-100 text-xs text-slate-500 leading-relaxed font-semibold">
+                📋 <strong>Advisor Recommendation:</strong> Please select your loan profile, employment structure, and target banks to view required document requirements. You can tick verified documents and download the checklist as a personalized PDF.
+              </div>
+              <LoanChecklistDownload />
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs font-mono text-slate-400 shrink-0">
+              <span>SR Finserv • Ahmedabad, Gujarat</span>
+              <button
+                onClick={() => setShowDocumentChecklistModal(false)}
+                className="px-4 py-2 bg-brand-navy-950 hover:bg-brand-navy-900 text-white font-sans text-xs font-bold rounded-xl transition-all shadow-xs active:scale-95 cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOMER REQUIREMENT FORM MODAL */}
+      {showInquiryModal && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-slate-950/60 backdrop-blur-md transition-opacity duration-300" 
+            onClick={() => setShowInquiryModal(false)}
+          />
+          
+          {/* Modal Container */}
+          <div className="relative bg-white border border-slate-200/80 w-full max-w-lg rounded-3xl shadow-[0_24px_50px_rgba(15,23,42,0.22)] flex flex-col max-h-[90vh] overflow-hidden animate-[scaleIn_0.25s_ease-out]">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-105 flex items-center justify-center text-[#2563eb]">
+                  <PhoneCall className="w-5 h-5 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="font-display text-base font-extrabold text-brand-navy-950">
+                    Customer Requirement Details
+                  </h3>
+                  <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
+                    Priority Doorstep Advisory Signup
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowInquiryModal(false)}
+                className="w-10 h-10 rounded-xl bg-white border border-slate-200/60 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all cursor-pointer shadow-xs active:scale-95"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto p-6 bg-white shrink-min">
+              <p className="text-xs text-slate-600 mb-5 font-semibold">
+                Please enter your requirements below. Founded by <strong className="text-brand-navy-900">Sanket Champaneri</strong>, we evaluate underwritings tailored strictly to your profile at your doorstep in Ahmedabad, Gujarat.
+              </p>
+
+              <form onSubmit={handleInquirySubmit} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Name</label>
+                  <input
+                    type="text"
+                    required
+                    className="w-full text-sm px-4 py-3 bg-white border border-slate-200 text-brand-navy-950 focus:outline-none focus:border-brand-navy-600 shadow-xs font-semibold rounded-xl"
+                    placeholder="e.g. Sanket Champaneri"
+                    value={formData.fullName}
+                    onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Mo. Number</label>
+                  <input
+                    type="tel"
+                    required
+                    className="w-full text-sm px-4 py-3 bg-white border border-slate-200 text-brand-navy-950 focus:outline-none focus:border-brand-navy-600 shadow-xs font-semibold rounded-xl"
+                    placeholder="e.g. +91 84879 74404"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Email id</label>
+                  <input
+                    type="email"
+                    required
+                    className="w-full text-sm px-4 py-3 bg-white border border-slate-200 text-brand-navy-950 focus:outline-none focus:border-brand-navy-600 shadow-xs font-semibold rounded-xl"
+                    placeholder="e.g. sanketbhavsar27@gmail.com"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Requirement</label>
+                  <select
+                    className="w-full text-sm px-4 py-3 bg-white border border-slate-200 text-brand-navy-950 focus:outline-none focus:border-brand-navy-600 shadow-xs font-semibold rounded-xl"
+                    value={formData.requirement}
+                    onChange={(e) => setFormData({ ...formData, requirement: e.target.value as any })}
+                  >
+                    <option value="Loan services">Loan services</option>
+                    <option value="Insurance services">Insurance services</option>
+                    <option value="Legal services">Legal services</option>
+                  </select>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-brand-navy-600 hover:bg-brand-navy-800 text-white font-black text-sm py-3.5 rounded-xl transition-all shadow-md mt-6 cursor-pointer"
+                >
+                  Submit Customer Requirement
+                </button>
+              </form>
+
+              {formSubmitted && (
+                <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-xl text-green-950 text-xs flex items-start gap-2.5 animate-fade-in">
+                  <CheckCircle className="w-5 h-5 shrink-0 text-green-600 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-sm">Inquiry logged successfully!</p>
+                    <p className="text-green-800 mt-1 font-medium leading-relaxed font-sans">
+                      We have logged your request. Sanket Champaneri or our doorstep legal specialist will call you back within 2 hours.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs font-mono text-slate-400 shrink-0">
+              <span>9 Years Experience • Ahmedabad Only</span>
+              <button
+                onClick={() => setShowInquiryModal(false)}
+                className="px-4 py-2 bg-brand-navy-950 hover:bg-brand-navy-900 text-white font-sans text-xs font-bold rounded-xl transition-all shadow-xs"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FREQUENTLY ASKED QUESTIONS MODAL */}
+      {showFaqModal && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-slate-950/60 backdrop-blur-md transition-opacity duration-300" 
+            onClick={() => setShowFaqModal(false)}
+          />
+          
+          {/* Modal Container */}
+          <div className="relative bg-white border border-slate-200/80 w-full max-w-2xl rounded-3xl shadow-[0_24px_50px_rgba(15,23,42,0.22)] flex flex-col max-h-[85vh] overflow-hidden animate-[scaleIn_0.25s_ease-out]">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
+                  <HelpCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-display text-base font-extrabold text-brand-navy-950">
+                    Frequently Asked Questions (FAQs)
+                  </h3>
+                  <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
+                    Loans, Stamp Duty & Registration Guide
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowFaqModal(false)}
+                className="w-10 h-10 rounded-xl bg-white border border-slate-200/60 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all cursor-pointer shadow-xs active:scale-95"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/40">
+              <p className="text-xs text-slate-500 font-medium leading-relaxed mb-1">
+                Have questions about loan requirements, underwriting guidelines, doorstep processing, or property registration and notarization laws in Gujarat? Browse through our compiled advisory answers below.
+              </p>
+
+              <div className="space-y-3">
+                {FAQS.map((faq, index) => {
+                  const isOpen = faqOpenIndex === index;
+                  return (
+                    <div
+                      key={index}
+                      className="border border-slate-200/70 rounded-2xl bg-white p-4 transition-all shadow-xs hover:border-blue-200"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setFaqOpenIndex(isOpen ? null : index)}
+                        className="w-full flex justify-between items-center text-left font-display font-semibold text-brand-navy-950 text-sm md:text-[14px] focus:outline-none"
+                      >
+                        <span className="pr-4">{faq.question}</span>
+                        {isOpen ? (
+                          <ChevronUp className="w-4 h-4 text-brand-gold-600 shrink-0" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                        )}
+                      </button>
+                      
+                      {isOpen && (
+                        <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-600 leading-relaxed font-sans font-medium">
+                          {faq.answer}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs font-mono text-slate-400 shrink-0">
+              <span>Verified Legal Advisory Services</span>
+              <button
+                onClick={() => setShowFaqModal(false)}
+                className="px-4 py-2 bg-brand-navy-950 hover:bg-brand-navy-900 text-white font-sans text-xs font-bold rounded-xl transition-all shadow-xs active:scale-95 cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

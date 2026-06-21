@@ -56,6 +56,7 @@ export interface ClientTestimonial {
   rating: number; // 1-5 stars
   status: 'Approved' | 'Pending';
   createdAt: string;
+  advisorReply?: string;
 }
 
 
