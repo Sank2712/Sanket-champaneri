@@ -94,6 +94,10 @@ export default function App() {
   
   // CRM mode for Sanket Champaneri inside workspace
   const [isCrmMode, setIsCrmMode] = useState<boolean>(false);
+  const [logoClickCount, setLogoClickCount] = useState<number>(0);
+  const [showPinModal, setShowPinModal] = useState<boolean>(false);
+  const [enteredPin, setEnteredPin] = useState<string>('');
+  const [pinError, setPinError] = useState<string>('');
   
   // Active state notifications
   const [toasts, setToasts] = useState<{ id: string; title: string; message: string; type: 'success' | 'warning' | 'info' }[]>([]);
@@ -306,11 +310,37 @@ export default function App() {
     }, 4500);
   };
 
-  // Trigger immediate CRM bypass unlock for Sanket
-  const triggerCrmPortalLogin = () => {
-    setIsCrmMode(true);
-    triggerNotification('CRM Active', 'Direct CRM Workspace active. Real-time entries unlocked.', 'success');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  // Handle secret clicking of the Logo to activate PIN challenge
+  const handleLogoClick = () => {
+    setActiveTab('home');
+    setIsCrmMode(false);
+    
+    setLogoClickCount((prev) => {
+      const next = prev + 1;
+      if (next >= 5) {
+        setShowPinModal(true);
+        setEnteredPin('');
+        setPinError('');
+        return 0; // Reset counter
+      }
+      return next;
+    });
+  };
+
+  // Handle checking of the 4-digit security PIN 8487
+  const handlePinSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (enteredPin === '8487') {
+      setIsCrmMode(true);
+      setShowPinModal(false);
+      setEnteredPin('');
+      setPinError('');
+      triggerNotification('CRM Active', 'Advisor CRM Workspace active. Real-time entries unlocked.', 'success');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      setPinError('Incorrect 4-digit code.');
+      setTimeout(() => setPinError(''), 2000);
+    }
   };
 
   // Dispatch an automated email system notification via the full-stack server
@@ -728,17 +758,77 @@ export default function App() {
             </div>
           </div>
         ))}
-      </div>      {/* COMPACT CLEAN HEADER */}
+      </div>
+
+      {/* ADVISOR SECURITY PIN ACCESS MODAL */}
+      {showPinModal && (
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-4 animate-fade-in animate-[duration-200]">
+          <div className="bg-white border border-slate-200/60 shadow-2xl rounded-2xl max-w-sm w-full p-6 relative overflow-hidden transition-transform transform">
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-brand-navy-900" />
+            
+            <div className="text-center mt-3">
+              <div className="w-12 h-12 bg-slate-50 border border-slate-100 rounded-xl mx-auto flex items-center justify-center text-slate-800 mb-4 shadow-xs">
+                <Lock className="w-5 h-5 text-brand-navy-900" />
+              </div>
+              <h4 className="font-display font-black text-lg text-brand-navy-900 tracking-tight">Advisor Security PIN</h4>
+              <p className="text-slate-500 text-xs font-semibold mt-1">Please authenticate with 4-digit system access code.</p>
+            </div>
+
+            <form onSubmit={handlePinSubmit} className="mt-6 space-y-4">
+              <div>
+                <input
+                  type="password"
+                  maxLength={4}
+                  pattern="[0-9]*"
+                  inputMode="numeric"
+                  value={enteredPin}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[^0-9]/g, '');
+                    setEnteredPin(val);
+                    setPinError('');
+                  }}
+                  placeholder="• • • •"
+                  autoFocus
+                  required
+                  className="w-full text-center tracking-[1em] text-lg font-black bg-slate-50 border border-slate-100 focus:border-brand-navy-900 focus:bg-white p-3.5 rounded-xl outline-none transition-all"
+                />
+              </div>
+
+              {pinError && (
+                <p className="text-center text-[11px] font-bold text-rose-500">{pinError}</p>
+              )}
+
+              <div className="grid grid-cols-2 gap-3 mt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPinModal(false);
+                    setEnteredPin('');
+                    setPinError('');
+                  }}
+                  className="p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="p-3 bg-brand-navy-900 hover:bg-brand-navy-800 text-white rounded-xl text-xs font-black tracking-wider transition-all cursor-pointer"
+                >
+                  Authorize
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}      {/* COMPACT CLEAN HEADER */}
       <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-100/80 transition-all">
         <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
           
           {/* Brand/Signature */}
           <div 
-            onClick={() => {
-              setActiveTab('home');
-              setIsCrmMode(false);
-            }} 
+            onClick={handleLogoClick} 
             className="flex items-center gap-3 cursor-pointer select-none group"
+            title="SR Finserv"
           >
             <div className="w-10 h-10 bg-brand-navy-900 rounded-xl flex items-center justify-center transition-all group-hover:scale-105 group-hover:shadow-sm">
               <span className="font-display font-black text-white text-base tracking-tighter">SR</span>
@@ -808,15 +898,6 @@ export default function App() {
 
           {/* Action Corners */}
           <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={triggerCrmPortalLogin}
-              className="p-2.5 bg-slate-50 border border-slate-205 hover:bg-slate-100 text-slate-600 hover:text-brand-navy-900 rounded-xl transition-colors cursor-pointer"
-              title="Advisor CRM Portal Login"
-            >
-              <Lock className="w-3.5 h-3.5" />
-            </button>
-
             {isCrmMode ? (
               <button
                 type="button"
