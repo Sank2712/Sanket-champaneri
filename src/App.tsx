@@ -110,6 +110,8 @@ export default function App() {
     details: ''
   });
   const [formSubmitted, setFormSubmitted] = useState(false);
+  const [submittedMailtoUrl, setSubmittedMailtoUrl] = useState<string>('');
+  const [submittedWhatsappUrl, setSubmittedWhatsappUrl] = useState<string>('');
 
   // Add Testimonial State
   const [newTestimonial, setNewTestimonial] = useState({
@@ -306,8 +308,8 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Execute immediate 1-click direct connection callback and dual-alert triggers
-  const handleInbuiltDirectConnect = async (fullName: string, phone: string, email: string, productTitle: string, leadType: LeadType) => {
+  // Execute immediate direct connection callback with unblocked secure mailto redirection and firestore queueing
+  const handleInbuiltDirectConnect = (fullName: string, phone: string, email: string, productTitle: string, leadType: LeadType) => {
     const newId = `lead-${Date.now()}`;
     const payload: InquiryLead = {
       id: newId,
@@ -316,26 +318,11 @@ export default function App() {
       email: email.trim() || 'N/A',
       leadType: leadType,
       subType: productTitle,
-      details: `1-Click direct connection requested for ${productTitle} from website visitor.`,
+      details: `1-Click Direct callback request registered for ${productTitle} from website visitor.`,
       status: 'New',
       createdAt: new Date().toISOString()
     };
 
-    try {
-      await setDoc(doc(db, 'leads', newId), payload);
-      triggerNotification(
-        'Inquiry Transmitted',
-        `Sanket Champaneri has been immediately notified regarding your "${productTitle}" requirement.`,
-        'success'
-      );
-    } catch (e) {
-      console.warn("Direct connection Firestore log error:", e);
-    }
-
-    // Now construct WhatsApp trigger directed to Sanket's direct number
-    const whatsappMessage = `Hello Sanket Champaneri inside SR Finserv,\nMy name is ${fullName.trim()} (${phone.trim()}).\nI urgently require assistance with product: ${productTitle}.\n\nPlease contact me immediately!`;
-    const whatsappUrl = `https://wa.me/918487974404?text=${encodeURIComponent(whatsappMessage)}`;
-    
     // Construct prefilled Email notification trigger with user's specific contact details
     const mailtoSubject = encodeURIComponent(`[URGENT CALLBACK INQUIRY] [customer reach] - ${fullName.trim()} requires ${productTitle}`);
     const mailtoBody = encodeURIComponent(
@@ -350,13 +337,33 @@ export default function App() {
     );
     const emailUrl = `mailto:sanketbhavsar27@gmail.com?subject=${mailtoSubject}&body=${mailtoBody}`;
 
-    // Open WhatsApp instantly in new tab
-    window.open(whatsappUrl, '_blank');
+    // Now construct WhatsApp trigger directed to Sanket's direct number
+    const whatsappMessage = `Hello Sanket Champaneri inside SR Finserv,\nMy name is ${fullName.trim()} (${phone.trim()}).\nI urgently require assistance with product: ${productTitle}.\n\nPlease contact me immediately!`;
+    const whatsappUrl = `https://wa.me/918487974404?text=${encodeURIComponent(whatsappMessage)}`;
 
-    // Smooth check-in for Email notification client launch
+    setSubmittedMailtoUrl(emailUrl);
+    setSubmittedWhatsappUrl(whatsappUrl);
+
+    // OPEN NATIVE MAILTO COMPLETELY SYNCHRONOUSLY FIRST (No delay, no browser blocks!)
+    window.location.href = emailUrl;
+
+    // Trigger WhatsApp in background a split-second later
     setTimeout(() => {
-      window.location.href = emailUrl;
-    }, 1000);
+      window.open(whatsappUrl, '_blank');
+    }, 200);
+
+    // Perform the database update asynchronously
+    setDoc(doc(db, 'leads', newId), payload)
+      .then(() => {
+        triggerNotification(
+          'Inquiry Transmitted',
+          `Sanket Champaneri has been immediately notified regarding your "${productTitle}" requirement.`,
+          'success'
+        );
+      })
+      .catch((e) => {
+        console.warn("Direct connection Firestore log error:", e);
+      });
   };
 
   // Prefill inquiry form based on specific service selections
@@ -409,30 +416,38 @@ export default function App() {
       createdAt: new Date().toISOString()
     };
 
+    // Immediately trigger native email notification window with prefilled lead data directed to sanketbhavsar27@gmail.com
+    const mailtoSubject = encodeURIComponent(`[SR Finserv Callback Inquiry] [customer reach] - ${payload.fullName}`);
+    const mailtoBody = encodeURIComponent(
+      `Hi Sanket,\n\nA new advisory request has been placed on srfinserv.co:\n\n` +
+      `- Full Name: ${payload.fullName}\n` +
+      `- Contact Phone: ${payload.phone}\n` +
+      `- Email: ${payload.email}\n` +
+      `- Desk Interest: ${payload.subType}\n` +
+      `- Detailed Requirements: ${payload.details}\n` +
+      `- Remarks Mail: Customer Reach\n\n` +
+      `Date Logged: ${new Date().toLocaleString()}\n\n` +
+      `Kindly review and contact the client immediately!\n`
+    );
+    const emailUrl = `mailto:sanketbhavsar27@gmail.com?subject=${mailtoSubject}&body=${mailtoBody}`;
+    
+    // Construct prefilled WhatsApp link as well
+    const whatsappMessage = `Hello Sanket Champaneri inside SR Finserv,\nMy name is ${payload.fullName} (${payload.phone}).\nI requested an advisory callback regarding: ${payload.subType}.\n\nKindly contact me back!`;
+    const whatsappUrl = `https://wa.me/918487974404?text=${encodeURIComponent(whatsappMessage)}`;
+
+    setSubmittedMailtoUrl(emailUrl);
+    setSubmittedWhatsappUrl(whatsappUrl);
+
+    // Synchronously open the native email composer (zero delay = bypass browser popup check)
+    window.location.href = emailUrl;
+
     setDoc(doc(db, 'leads', newId), payload)
       .then(() => {
         triggerNotification(
           'Inquiry Received',
-          `Hello ${payload.fullName}, your requirement is successfully queued. Sanket will contact you at ${payload.phone} shortly.`,
+          `Thank you, ${payload.fullName}. We will reach you within one hour.`,
           'success'
         );
-
-        // Immediately trigger native email notification window with prefilled lead data directed to sanketbhavsar27@gmail.com
-        const mailtoSubject = encodeURIComponent(`[SR Finserv Callback Inquiry] [customer reach] - ${payload.fullName}`);
-        const mailtoBody = encodeURIComponent(
-          `Hi Sanket,\n\nA new advisory request has been placed on srfinserv.co:\n\n` +
-          `- Full Name: ${payload.fullName}\n` +
-          `- Contact Phone: ${payload.phone}\n` +
-          `- Email: ${payload.email}\n` +
-          `- Desk Interest: ${payload.subType}\n` +
-          `- Detailed Requirements: ${payload.details}\n` +
-          `- Remarks Mail: Customer Reach\n\n` +
-          `Date Logged: ${new Date().toLocaleString()}\n\n` +
-          `Kindly review and contact the client immediately!\n`
-        );
-        
-        // Open the native email composer automatically
-        window.location.href = `mailto:sanketbhavsar27@gmail.com?subject=${mailtoSubject}&body=${mailtoBody}`;
 
         setFormSubmitted(true);
         setFormData({
@@ -828,54 +843,6 @@ export default function App() {
       {/* MAIN CONTAINER */}
       {!isCrmMode ? (
         <main className="flex-1 bg-slate-50/50">
-          
-          {/* VIP 1-Click Status Connectivity Bar */}
-          <div className="bg-slate-900 border-b border-slate-800 text-white font-sans py-3.5 px-6 shadow-sm">
-            <div className="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3">
-              <div className="flex items-center gap-2.5">
-                <span className="flex-shrink-0 text-base">⚡</span>
-                {visitorContact ? (
-                  <p className="text-[11.5px] font-bold text-emerald-400">
-                    VIP 1-Click Routing Enabled: <span className="text-white underline">{visitorContact.fullName}</span> ({visitorContact.phone}). Selecting any card below instantly alerts Sanket on WhatsApp & Email!
-                  </p>
-                ) : (
-                  <p className="text-[11.5px] font-semibold text-slate-300">
-                    Ahmedabad Premium Desk Desk: Pre-register your contact details to unlock instantaneous <span className="text-blue-400 font-bold">1-Click doorstep callback dispatch</span> across any service card.
-                  </p>
-                )}
-              </div>
-              
-              <div className="flex items-center gap-2 shrink-0">
-                {visitorContact ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      localStorage.removeItem('sr_finserv_visitor_contact');
-                      setVisitorContact(null);
-                      triggerNotification('Preferences Reset', 'Your 1-click pre-registration details have been removed.', 'info');
-                    }}
-                    className="bg-slate-800 hover:bg-slate-750 text-white/90 text-[10px] font-black uppercase px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer border border-slate-700"
-                  >
-                    Logout VIP ⚙️
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setInbuiltDirectModal({
-                        isOpen: true,
-                        type: 'loan',
-                        title: 'All-Services Registration'
-                      });
-                    }}
-                    className="bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black uppercase px-4 py-1.5 rounded-lg transition-colors cursor-pointer shadow-xs"
-                  >
-                    Set VIP Connection Details 🚀
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
           
           {/* HOME TAB (DEFAULT PRESTIGE LANDING) */}
           {activeTab === 'home' && (
@@ -1503,14 +1470,46 @@ export default function App() {
                       </div>
                       <h3 className="font-display font-black text-slate-900 text-lg">Inquiry Successfully Placed!</h3>
                       <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                        Your requirement checklist has been synchronized with the real-time database. Sanket Champaneri is notified and will call you soon.
+                        Your requirement checklist has been synchronized with the real-time database. We will reach you within one hour.
                       </p>
-                      <button
-                        onClick={() => setFormSubmitted(false)}
-                        className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-lg transition-colors mt-2"
-                      >
-                        Submit Another Callback
-                      </button>
+
+                      <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-2xl text-left space-y-3 mt-4">
+                        <p className="text-[11px] text-blue-900 font-extrabold text-center uppercase tracking-wider">
+                          📬 Dispatch Immediate Notifications
+                        </p>
+                        <p className="text-[10.5px] text-slate-500 font-medium text-center leading-normal">
+                          If your browser or device has blocked the automatic mailbox launcher, click the buttons below to open your secure email and WhatsApp alerts:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 font-sans">
+                          {submittedMailtoUrl && (
+                            <a 
+                              href={submittedMailtoUrl}
+                              className="bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-xs text-center border border-blue-700"
+                            >
+                              📧 Open Email Notification
+                            </a>
+                          )}
+                          {submittedWhatsappUrl && (
+                            <a 
+                              href={submittedWhatsappUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-xs text-center border border-emerald-700"
+                            >
+                              💬 Open WhatsApp Alert
+                            </a>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="pt-2">
+                        <button
+                          onClick={() => setFormSubmitted(false)}
+                          className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-lg transition-colors inline-block cursor-pointer mt-1"
+                        >
+                          Submit Another Callback
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <form onSubmit={handleInquirySubmit} className="space-y-4.5">
@@ -1579,7 +1578,7 @@ export default function App() {
                           type="submit"
                           className="w-full bg-brand-navy-900 hover:bg-brand-navy-800 text-white font-extrabold text-xs py-3.5 rounded-xl shadow-md transition-all uppercase tracking-wider text-center cursor-pointer"
                         >
-                          Submit Callback Dispatch →
+                          Submit
                         </button>
                       </div>
                     </form>
@@ -2364,13 +2363,12 @@ export default function App() {
               >
                 ✕
               </button>
-              <span className="text-[9.5px] uppercase font-black tracking-widest text-blue-400 block mb-1">⚡ Ahmedabad Direct Connect</span>
               <h3 className="font-display font-black text-xl tracking-tight leading-tight">
-                Secure Doorstep Callback
+                Get a Callback
               </h3>
               <p className="text-[11px] text-slate-300 font-medium leading-relaxed mt-1.5 font-sans">
                 You selected: <span className="text-white font-extrabold underline">{inbuiltDirectModal.title}</span>. 
-                Configure your details once and Sanket Champaneri will be notified instantly via both WhatsApp and direct Email dispatch.
+                Provide your details to initiate an immediate WhatsApp and direct Email dispatch to Sanket Champaneri inside SR Finserv.
               </p>
             </div>
 
@@ -2448,8 +2446,8 @@ export default function App() {
                 />
               </div>
 
-              <div className="pt-2 text-center text-[10px] text-slate-400 font-medium leading-normal mb-1">
-                ⚠️ Clicking submit will open your pre-filled WhatsApp and direct mail compose window.
+              <div className="pt-2 text-center text-[10px] text-slate-400 font-bold leading-normal mb-1">
+                ⚠️ Form submission will execute a secure database save and automatically trigger a pre-filled direct email dispatch.
               </div>
 
               {/* Action dispatch buttons */}
@@ -2458,7 +2456,7 @@ export default function App() {
                   type="submit"
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs py-3 rounded-xl shadow-md transition-colors uppercase tracking-wider text-center cursor-pointer flex items-center justify-center gap-1.5"
                 >
-                  🚀 Connect & Start Dispatch
+                  Get a Callback
                 </button>
                 <button
                   type="button"
