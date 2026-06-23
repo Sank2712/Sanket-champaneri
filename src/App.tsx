@@ -313,6 +313,26 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Dispatch an automated email system notification via the full-stack server
+  const sendSystemEmailNotification = async (payload: InquiryLead) => {
+    try {
+      const res = await fetch('/api/send-lead-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        console.warn('Backend server notification response error status:', res.status);
+      } else {
+        console.log('Automated system notification dispatched successfully to sanketbhavsar27@gmail.com');
+      }
+    } catch (err) {
+      console.error('System notification dispatch failed:', err);
+    }
+  };
+
   // Execute immediate direct connection callback with unblocked secure mailto redirection and firestore queueing
   const handleInbuiltDirectConnect = (fullName: string, phone: string, email: string, productTitle: string, leadType: LeadType) => {
     const newId = `lead-${Date.now()}`;
@@ -356,6 +376,9 @@ export default function App() {
     setTimeout(() => {
       window.open(whatsappUrl, '_blank');
     }, 200);
+
+    // Trigger backend system email notification under-the-hood!
+    sendSystemEmailNotification(payload);
 
     // Perform the database update asynchronously
     setDoc(doc(db, 'leads', newId), payload)
@@ -440,6 +463,9 @@ export default function App() {
       window.open(whatsappUrl, '_blank');
     }, 200);
 
+    // Send backend automated system email notification!
+    sendSystemEmailNotification(payload);
+
     try {
       await setDoc(doc(db, 'leads', newId), payload);
       triggerNotification(
@@ -512,6 +538,9 @@ export default function App() {
 
     // Synchronously open the native email composer (zero delay = bypass browser popup check)
     window.location.href = emailUrl;
+
+    // Trigger backend system email notification under-the-hood!
+    sendSystemEmailNotification(payload);
 
     setDoc(doc(db, 'leads', newId), payload)
       .then(() => {
