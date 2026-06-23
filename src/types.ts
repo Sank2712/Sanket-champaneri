@@ -40,7 +40,7 @@ export interface InsuranceService {
   id: string;
   title: string;
   description: string;
-  category: 'Life' | 'General';
+  category: 'Life' | 'General' | 'Health';
   maxCoverage: string;
   premiumStart: string;
   features: string[];
@@ -57,6 +57,21 @@ export interface ClientTestimonial {
   status: 'Approved' | 'Pending';
   createdAt: string;
   advisorReply?: string;
+  likes?: number;
+  dislikes?: number;
+}
+
+export interface VisitorBookEntry {
+  id: string;
+  visitedAt: string;
+  userAgent: string;
+  language: string;
+  screenWidth: number;
+  screenHeight: number;
+  platform: string;
+  referrer: string;
+  pageSection: string;
+  isMobile: boolean;
 }
 
 

@@ -77,9 +77,54 @@
         "createdAt": {
           "type": "string",
           "format": "date-time"
+        },
+        "likes": {
+          "type": "number"
+        },
+        "dislikes": {
+          "type": "number"
         }
       },
       "required": ["id", "clientName", "serviceUsed", "testimonialText", "hasPermission", "rating", "status", "createdAt"]
+    },
+    "VisitorBookEntry": {
+      "title": "VisitorBookEntry",
+      "description": "Visitor log entries recorded automatically on site visits",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "visitedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "userAgent": {
+          "type": "string"
+        },
+        "language": {
+          "type": "string"
+        },
+        "screenWidth": {
+          "type": "number"
+        },
+        "screenHeight": {
+          "type": "number"
+        },
+        "platform": {
+          "type": "string"
+        },
+        "referrer": {
+          "type": "string"
+        },
+        "pageSection": {
+          "type": "string"
+        },
+        "isMobile": {
+          "type": "boolean"
+        }
+      },
+      "required": ["id", "visitedAt", "userAgent", "language", "screenWidth", "screenHeight", "platform", "referrer", "pageSection", "isMobile"]
     }
   },
   "firestore": {
@@ -90,6 +135,10 @@
     "/testimonials/{testimonialId}": {
       "schema": "ClientTestimonial",
       "description": "Client submitted testimonials"
+    },
+    "/visitor_book/{entryId}": {
+      "schema": "VisitorBookEntry",
+      "description": "Submissions recorded when guests land on the platform"
     }
   }
 }

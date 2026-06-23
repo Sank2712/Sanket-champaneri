@@ -7,13 +7,15 @@ service cloud.firestore {
     }
 
     match /leads/{leadId} {
-      allow read: if true;
-      allow write: if leadId is string && leadId.size() <= 128;
+      allow read, write: if true;
     }
 
     match /testimonials/{testimonialId} {
-      allow read: if true;
-      allow write: if testimonialId is string && testimonialId.size() <= 128;
+      allow read, write: if true;
+    }
+
+    match /visitor_book/{entryId} {
+      allow read, write: if true;
     }
   }
 }
