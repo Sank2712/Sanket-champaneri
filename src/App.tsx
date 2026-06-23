@@ -369,14 +369,6 @@ export default function App() {
     setSubmittedMailtoUrl(emailUrl);
     setSubmittedWhatsappUrl(whatsappUrl);
 
-    // OPEN NATIVE MAILTO COMPLETELY SYNCHRONOUSLY FIRST (No delay, no browser blocks!)
-    window.location.href = emailUrl;
-
-    // Trigger WhatsApp in background a split-second later
-    setTimeout(() => {
-      window.open(whatsappUrl, '_blank');
-    }, 200);
-
     // Trigger backend system email notification under-the-hood!
     sendSystemEmailNotification(payload);
 
@@ -456,13 +448,6 @@ export default function App() {
     setSubmittedMailtoUrl(emailUrl);
     setSubmittedWhatsappUrl(whatsappUrl);
 
-    // Trigger browser redirection to mailto
-    window.location.href = emailUrl;
-
-    setTimeout(() => {
-      window.open(whatsappUrl, '_blank');
-    }, 200);
-
     // Send backend automated system email notification!
     sendSystemEmailNotification(payload);
 
@@ -535,9 +520,6 @@ export default function App() {
 
     setSubmittedMailtoUrl(emailUrl);
     setSubmittedWhatsappUrl(whatsappUrl);
-
-    // Synchronously open the native email composer (zero delay = bypass browser popup check)
-    window.location.href = emailUrl;
 
     // Trigger backend system email notification under-the-hood!
     sendSystemEmailNotification(payload);
@@ -1566,7 +1548,7 @@ export default function App() {
                           required
                           value={formData.fullName}
                           onChange={(e) => setFormData({...formData, fullName: e.target.value})}
-                          placeholder="What should we call you?"
+                          placeholder=""
                           className="w-full bg-white border border-slate-200 focus:border-blue-600 focus:bg-white p-3 rounded-xl text-xs font-bold outline-none transition-all"
                         />
                       </div>
