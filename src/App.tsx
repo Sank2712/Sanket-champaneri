@@ -112,6 +112,11 @@ export default function App() {
   const [formSubmitted, setFormSubmitted] = useState(false);
   const [submittedMailtoUrl, setSubmittedMailtoUrl] = useState<string>('');
   const [submittedWhatsappUrl, setSubmittedWhatsappUrl] = useState<string>('');
+  
+  // Custom states for financial/loan turn-by-turn question wizard
+  const [loanStep, setLoanStep] = useState<number>(0);
+  const [loanAmount, setLoanAmount] = useState<string>('');
+  const [loanArea, setLoanArea] = useState<string>('');
 
   // Add Testimonial State
   const [newTestimonial, setNewTestimonial] = useState({
@@ -369,17 +374,84 @@ export default function App() {
   // Prefill inquiry form based on specific service selections
   const handlePrefillInquiry = (type: LeadType, id: string, name: string) => {
     setSelectedServiceId(id);
-    // If the visitor already populated their contact details, we provide the amazing "invisible" 1-click callback launch!
-    if (visitorContact) {
-      handleInbuiltDirectConnect(visitorContact.fullName, visitorContact.phone, visitorContact.email, name, type);
-    } else {
-      // Prompt modal instantly
-      setInbuiltDirectModal({
-        isOpen: true,
-        type,
-        title: name
-      });
+    // Reset questionnaire wizard and set steps directly to Question 1 for all desks
+    setLoanAmount('');
+    setLoanArea('');
+    setLoanStep(1);
+    
+    setModalFormData({
+      fullName: visitorContact?.fullName || `Anonymous ${type === 'loan' ? 'Loan' : type === 'legal' ? 'Legal' : 'Insurance'} Customer`,
+      phone: visitorContact?.phone || 'N/A',
+      email: visitorContact?.email || 'N/A'
+    });
+
+    setInbuiltDirectModal({
+      isOpen: true,
+      type,
+      title: name
+    });
+  };
+
+  // Turn-by-turn questionnaire submit handler for loan (financial), legal, and insurance products
+  const handleLoanFlowSubmit = async () => {
+    const newId = `lead-${Date.now()}`;
+    const curType = inbuiltDirectModal?.type || 'loan';
+    const fallbackName = `Anonymous ${curType === 'loan' ? 'Loan' : curType === 'legal' ? 'Legal' : 'Insurance'} Customer`;
+    const payload: InquiryLead = {
+      id: newId,
+      fullName: modalFormData.fullName.trim() || visitorContact?.fullName || fallbackName,
+      phone: modalFormData.phone.trim() || visitorContact?.phone || 'N/A',
+      email: modalFormData.email.trim() || visitorContact?.email || 'N/A',
+      leadType: curType,
+      subType: inbuiltDirectModal?.title || 'Unknown Service',
+      details: `Loan Amount: ${loanAmount.trim() || 'Not specified'}. City Area: ${loanArea.trim() || 'Not specified'}.`,
+      status: 'New',
+      createdAt: new Date().toISOString()
+    };
+
+    // Construct prefilled Email notification trigger with user's specific contact details and answers
+    const mailtoSubject = encodeURIComponent(`[URGENT CALLBACK INQUIRY] [customer reach] - ${payload.fullName} requires ${payload.subType}`);
+    const mailtoBody = encodeURIComponent(
+      `Hi Sanket,\n\nA new customer wants an immediate callback. Questionnaire Details:\n\n` +
+      `- Client Name: ${payload.fullName}\n` +
+      `- Contact Number: ${payload.phone}\n` +
+      `- Email Address: ${payload.email}\n` +
+      `- Chosen Desk Segment: ${curType.toUpperCase()}\n` +
+      `- Chosen Service: ${payload.subType}\n` +
+      `- Loan Amount Looking For: ${loanAmount.trim() || 'N/A'}\n` +
+      `- Area/City Location: ${loanArea.trim() || 'N/A'}\n` +
+      `- Handled On: ${new Date().toLocaleString()}\n` +
+      `- Remarks Mail: Customer Reach\n\n` +
+      `This message has been dispatched immediately to you via system sync. Make contact now!`
+    );
+    const emailUrl = `mailto:sanketbhavsar27@gmail.com?subject=${mailtoSubject}&body=${mailtoBody}`;
+
+    // WhatsApp Alert
+    const whatsappMessage = `Hello Sanket Champaneri inside SR Finserv,\nMy name is ${payload.fullName} (${payload.phone}).\nI requested a callback for: ${payload.subType}.\n\n- Loan Amount: ${loanAmount.trim() || 'N/A'}\n- City Area: ${loanArea.trim() || 'N/A'}.\n\nPlease contact me in 1 hour!`;
+    const whatsappUrl = `https://wa.me/918487974404?text=${encodeURIComponent(whatsappMessage)}`;
+
+    setSubmittedMailtoUrl(emailUrl);
+    setSubmittedWhatsappUrl(whatsappUrl);
+
+    // Trigger browser redirection to mailto
+    window.location.href = emailUrl;
+
+    setTimeout(() => {
+      window.open(whatsappUrl, '_blank');
+    }, 200);
+
+    try {
+      await setDoc(doc(db, 'leads', newId), payload);
+      triggerNotification(
+        'Inquiry Transmitted',
+        'Thank you for visit our representative will reach you in one hour',
+        'success'
+      );
+    } catch (e) {
+      console.warn("Direct connection Firestore log error:", e);
     }
+
+    setLoanStep(3);
   };
 
   // Contact form submission
@@ -1108,25 +1180,8 @@ export default function App() {
                               <h4 className="font-display font-extrabold text-brand-navy-900 group-hover:text-blue-600 transition-colors text-base leading-snug">
                                 {loan.title}
                               </h4>
-                              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                                {loan.description}
-                              </p>
-                              {loan.features && loan.features.length > 0 && (
-                                <ul className="space-y-1.5 pt-2">
-                                  {loan.features.slice(0, 3).map((feat, i) => (
-                                    <li key={i} className="text-[10px] text-slate-600 font-bold flex items-center gap-1.5">
-                                      <span className="text-blue-600">✓</span> {feat}
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                              {loan.interestRateMin && (
-                                <div className="inline-flex bg-blue-50 border border-blue-105 px-2.5 py-1 rounded-lg">
-                                  <span className="text-[10px] font-black text-blue-700 uppercase tracking-widest">{loan.interestRateMin}</span>
-                                </div>
-                              )}
                             </div>
-                            <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+                            <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
                               <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">Advisory service</span>
                               <span className="text-xs text-blue-600 font-black group-hover:translate-x-1.5 transition-transform inline-flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-xl border border-blue-100">
                                 Inquire Now <ArrowRight className="w-3.5 h-3.5" />
@@ -1179,34 +1234,8 @@ export default function App() {
                               }`}>
                                 {legal.title}
                               </h4>
-                              {isNotary ? (
-                                <>
-                                  <p className="text-xs text-blue-950 font-bold leading-relaxed bg-blue-105/30 p-2.5 rounded-lg border border-blue-100/55">
-                                    {legal.description}
-                                  </p>
-                                  <p className="text-[10px] text-blue-700 font-semibold font-sans italic">
-                                    ✓ {legal.importance}
-                                  </p>
-                                </>
-                              ) : (
-                                <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                                  {legal.description}
-                                </p>
-                              )}
-                              {legal.documentsRequired && legal.documentsRequired.length > 0 && (
-                                <div className="space-y-1">
-                                  <span className="text-[9px] uppercase font-extrabold text-slate-400 block">Needs:</span>
-                                  <ul className="space-y-1">
-                                    {legal.documentsRequired.map((doc, idx) => (
-                                      <li key={idx} className="text-[10px] text-slate-600 font-bold flex items-center gap-1.5">
-                                        <span className="text-purple-600">•</span> {doc}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
                             </div>
-                            <div className={`mt-6 pt-4 border-t flex items-center justify-between ${isNotary ? 'border-blue-200' : 'border-slate-100'}`}>
+                            <div className={`mt-4 pt-4 border-t flex items-center justify-between ${isNotary ? 'border-blue-200' : 'border-slate-100'}`}>
                               <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Conveyance desk</span>
                               <span className={`text-xs font-black group-hover:translate-x-1.5 transition-transform inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border ${
                                 isSelected ? 'text-purple-700 bg-purple-50 border-purple-100' : isNotary ? 'text-blue-700 bg-blue-50 border-blue-100' : 'text-purple-600 bg-purple-50 border-purple-100'
@@ -1251,20 +1280,8 @@ export default function App() {
                               <h4 className="font-display font-extrabold text-brand-navy-900 group-hover:text-emerald-600 transition-colors text-base leading-snug">
                                 {ins.title}
                               </h4>
-                              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                                {ins.description}
-                              </p>
-                              {ins.features && ins.features.length > 0 && (
-                                <ul className="space-y-1.5 pt-2">
-                                  {ins.features.slice(0, 3).map((feat, i) => (
-                                    <li key={i} className="text-[10px] text-slate-600 font-bold flex items-center gap-1.5">
-                                      <span className="text-emerald-600">✓</span> {feat}
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
                             </div>
-                            <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+                            <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
                               <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">Protection desk</span>
                               <span className="text-xs text-emerald-600 font-black group-hover:translate-x-1.5 transition-transform inline-flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-xl border border-emerald-100">
                                 Get Quote <ArrowRight className="w-3.5 h-3.5" />
@@ -2352,8 +2369,9 @@ export default function App() {
       {/* INBUILT DIRECT 1-CLICK CONNECTION MODAL */}
       {inbuiltDirectModal?.isOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-[99999] animate-fade-in">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-100 flex flex-col justify-between transform transition-all scale-100">
-            {/* Modal Header in dark blue and white logo colours */}
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-100 flex flex-col justify-between transform transition-all scale-100 pb-2">
+            
+            {/* Modal Header */}
             <div className="bg-brand-navy-900 text-white p-6 relative">
               <button 
                 type="button" 
@@ -2363,110 +2381,181 @@ export default function App() {
               >
                 ✕
               </button>
-              <h3 className="font-display font-black text-xl tracking-tight leading-tight">
-                Get a Callback
-              </h3>
-              <p className="text-[11px] text-slate-300 font-medium leading-relaxed mt-1.5 font-sans">
-                You selected: <span className="text-white font-extrabold underline">{inbuiltDirectModal.title}</span>. 
-                Provide your details to initiate an immediate WhatsApp and direct Email dispatch to Sanket Champaneri inside SR Finserv.
-              </p>
+              
+              <>
+                <span className="text-[9px] uppercase font-black tracking-widest text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded-full inline-block mb-2 font-mono">
+                  {loanStep === 3 ? "Submission Complete" : `Step ${loanStep} of 2: Inquiry Desk`}
+                </span>
+                <h3 className="font-display font-black text-xl tracking-tight leading-tight">
+                  {loanStep === 3 ? "Inquiry Received!" : "Get a Callback"}
+                </h3>
+                <p className="text-[11px] text-slate-300 font-medium leading-relaxed mt-1.5 font-sans">
+                  {loanStep === 1 && `Regarding ${inbuiltDirectModal.title}: How much loan are you looking for?`}
+                  {loanStep === 2 && `Regarding ${inbuiltDirectModal.title}: In which area/city are you seeking this?`}
+                  {loanStep === 3 && `Thank you for visit! Our representative will reach you in one hour.`}
+                </p>
+              </>
             </div>
 
-            {/* Modal Form Content */}
-            <form 
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (!modalFormData.fullName.trim() || !modalFormData.phone.trim()) {
-                  alert('Kindly share your primary Name and Contact Number to dispatch 1-Click.');
-                  return;
-                }
+            {/* Custom Multi-Step Questionnaire Wizard for all types */}
+            <div className="p-6 font-sans">
+              {/* STEP 1: Q1 HOW MUCH LOAN ARE YOU LOOKING FOR? */}
+              {loanStep === 1 && (
+                <div className="space-y-4">
+                  <label className="block text-xs font-black uppercase text-slate-700 tracking-wider mb-1">
+                    1) How much loan are you looking for? <span className="text-blue-600">*</span>
+                  </label>
+                  
+                  {/* Prestigious pre-defined selection chips */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      '₹15 - 30 Lakhs',
+                      '₹30 - 50 Lakhs',
+                      '₹50 - 99 Lakhs',
+                      '₹1 Cr - 3 Crore',
+                      '₹3 Crore+'
+                    ].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => {
+                          setLoanAmount(preset);
+                          setLoanStep(2);
+                        }}
+                        className={`py-2 px-3 rounded-xl border text-[11px] font-bold text-center transition-all ${
+                          loanAmount === preset 
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm' 
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-blue-50/20'
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
 
-                const contactPayload = {
-                  fullName: modalFormData.fullName.trim(),
-                  phone: modalFormData.phone.trim(),
-                  email: modalFormData.email.trim() || 'N/A'
-                };
+                  <div className="pt-2">
+                    <span className="block text-[10px] uppercase tracking-wider font-extrabold text-slate-400 mb-1.5">Or write custom amount:</span>
+                    <input 
+                      type="text"
+                      placeholder="e.g. 45 Lakhs, 1.2 Crores"
+                      value={loanAmount}
+                      onChange={(e) => setLoanAmount(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl px-4 py-2.5 text-xs text-brand-navy-900 font-bold focus:outline-none transition-colors"
+                    />
+                  </div>
 
-                // Persist settings for future instant 1-clicks
-                localStorage.setItem('sr_finserv_visitor_contact', JSON.stringify(contactPayload));
-                setVisitorContact(contactPayload);
-                
-                // Clear state helper
-                setInbuiltDirectModal(null);
-                
-                // Execute direct connect routing pipelines
-                await handleInbuiltDirectConnect(
-                  contactPayload.fullName, 
-                  contactPayload.phone, 
-                  contactPayload.email, 
-                  inbuiltDirectModal.title, 
-                  inbuiltDirectModal.type
-                );
-              }}
-              className="p-6 space-y-4 font-sans"
-            >
-              <div>
-                <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1.5">
-                  Your Full Name <span className="text-blue-600 font-extrabold">*</span>
-                </label>
-                <input 
-                  type="text" 
-                  required
-                  placeholder="e.g. Ramesh Patel" 
-                  value={modalFormData.fullName}
-                  onChange={(e) => setModalFormData(prev => ({ ...prev, fullName: e.target.value }))}
-                  className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl px-4 py-2.5 text-xs text-brand-navy-900 font-bold focus:outline-none transition-colors"
-                />
-              </div>
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      disabled={!loanAmount.trim()}
+                      onClick={() => setLoanStep(2)}
+                      className={`w-full text-white font-extrabold text-xs py-3 rounded-xl shadow-md transition-colors uppercase tracking-wider text-center ${
+                        loanAmount.trim() ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer' : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                      }`}
+                    >
+                      Next Step: Location Area →
+                    </button>
+                  </div>
+                </div>
+              )}
 
-              <div>
-                <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1.5">
-                  Mobile / WhatsApp Number <span className="text-blue-600 font-extrabold">*</span>
-                </label>
-                <input 
-                  type="tel" 
-                  required
-                  placeholder="e.g. +91 98765 43210" 
-                  value={modalFormData.phone}
-                  onChange={(e) => setModalFormData(prev => ({ ...prev, phone: e.target.value }))}
-                  className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl px-4 py-2.5 text-xs text-brand-navy-900 font-bold focus:outline-none transition-colors"
-                />
-              </div>
+              {/* STEP 2: Q2 IN WHICH AREA IN CITY? */}
+              {loanStep === 2 && (
+                <div className="space-y-4">
+                  <label className="block text-xs font-black uppercase text-slate-700 tracking-wider mb-1">
+                    2) In which area in city? <span className="text-blue-600">*</span>
+                  </label>
 
-              <div>
-                <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1.5">
-                  Your Email Address (Optional)
-                </label>
-                <input 
-                  type="email" 
-                  placeholder="e.g. ramesh@gmail.com" 
-                  value={modalFormData.email}
-                  onChange={(e) => setModalFormData(prev => ({ ...prev, email: e.target.value }))}
-                  className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl px-4 py-2.5 text-xs text-brand-navy-900 font-bold focus:outline-none transition-colors"
-                />
-              </div>
+                  {/* Neighborhood selector chips in Ahmedabad */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      'Prahladnagar',
+                      'Bopal',
+                      'Satellite',
+                      'Bodakdev',
+                      'Vastrapur',
+                      'S G Highway',
+                      'C G Road'
+                    ].map((area) => (
+                      <button
+                        key={area}
+                        type="button"
+                        onClick={() => {
+                          setLoanArea(area);
+                        }}
+                        className={`py-1.5 px-3 rounded-full border text-[10px] font-extrabold transition-all ${
+                          loanArea === area 
+                            ? 'bg-blue-600 text-white border-blue-600' 
+                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-blue-50/20'
+                        }`}
+                      >
+                        {area}
+                      </button>
+                    ))}
+                  </div>
 
-              <div className="pt-2 text-center text-[10px] text-slate-400 font-bold leading-normal mb-1">
-                ⚠️ Form submission will execute a secure database save and automatically trigger a pre-filled direct email dispatch.
-              </div>
+                  <div className="pt-1">
+                    <span className="block text-[10px] uppercase tracking-wider font-extrabold text-slate-400 mb-1.5">Or type specialized location:</span>
+                    <input 
+                      type="text"
+                      placeholder="e.g. Gota, Chandkheda, Shahibaug"
+                      value={loanArea}
+                      onChange={(e) => setLoanArea(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl px-4 py-2.5 text-xs text-brand-navy-900 font-bold focus:outline-none transition-colors"
+                    />
+                  </div>
 
-              {/* Action dispatch buttons */}
-              <div className="flex flex-col gap-2 pt-1">
-                <button
-                  type="submit"
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs py-3 rounded-xl shadow-md transition-colors uppercase tracking-wider text-center cursor-pointer flex items-center justify-center gap-1.5"
-                >
-                  Get a Callback
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInbuiltDirectModal(null)}
-                  className="w-full text-slate-500 hover:text-slate-800 font-extrabold text-[11px] py-1 text-center cursor-pointer"
-                >
-                  Cancel Connection
-                </button>
-              </div>
-            </form>
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setLoanStep(1)}
+                      className="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs py-3 rounded-xl transition-colors uppercase tracking-wider text-center"
+                    >
+                      ← Back
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!loanArea.trim()}
+                      onClick={handleLoanFlowSubmit}
+                      className={`w-2/3 text-white font-extrabold text-xs py-3 rounded-xl shadow-md transition-colors uppercase tracking-wider text-center ${
+                        loanArea.trim() ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer' : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                      }`}
+                    >
+                      Get a Callback
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 3: THANK YOU SCREEN */}
+              {loanStep === 3 && (
+                <div className="text-center py-6 space-y-4">
+                  <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center text-3xl mx-auto shadow-inner animate-bounce">
+                    ✓
+                  </div>
+                  
+                  <div className="space-y-2 px-1">
+                    <h4 className="font-display font-black text-brand-navy-900 text-lg leading-snug">
+                      Thank you for providing details!
+                    </h4>
+                    <p className="text-xs text-emerald-950 font-black bg-emerald-50 border border-emerald-100 py-3.5 px-4 rounded-xl leading-relaxed">
+                      Thank you for visit our representative will reach you in one hour.
+                    </p>
+                    <p className="text-[11px] text-slate-500 font-semibold leading-relaxed pt-1">
+                      Sanket Champaneri has been double-notified regarding your exact loan requirement: <strong className="text-slate-800">{loanAmount}</strong> in <strong className="text-slate-800">{loanArea}</strong>.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setInbuiltDirectModal(null)}
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs py-3 rounded-xl transition-colors uppercase tracking-wider text-center"
+                  >
+                    Close Desk
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
