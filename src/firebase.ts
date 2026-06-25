@@ -1,7 +1,10 @@
 import { initializeApp } from 'firebase/app';
-import { initializeFirestore } from 'firebase/firestore';
+import { initializeFirestore, setLogLevel } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import config from '../firebase-applet-config.json';
+
+// Silence Firestore SDK internal logs (such as transient "Could not reach Cloud Firestore backend" warning messages)
+setLogLevel('silent');
 
 const firebaseApp = initializeApp(config);
 export const db = initializeFirestore(firebaseApp, {

@@ -356,7 +356,16 @@ export default function App() {
       if (!res.ok) {
         console.warn('Backend server notification response error status:', res.status);
       } else {
-        console.log('Automated system notification dispatched successfully to sanketbhavsar27@gmail.com');
+        const data = await res.json();
+        if (data && data.warn === "GMAIL_APP_PASSWORD_REQUIRED") {
+          triggerNotification(
+            "SMTP App Password Needed",
+            "Gmail requires a 16-character App Password. See system console logs for quick setup instructions.",
+            "warning"
+          );
+        } else {
+          console.log('Automated system notification dispatched successfully to sanketbhavsar27@gmail.com');
+        }
       }
     } catch (err) {
       console.error('System notification dispatch failed:', err);
@@ -417,17 +426,20 @@ export default function App() {
   };
 
   // Prefill inquiry form based on specific service selections
-  const handlePrefillInquiry = (type: LeadType, id: string, name: string) => {
+  const handlePrefillInquiry = async (type: LeadType, id: string, name: string) => {
     setSelectedServiceId(id);
     // Reset questionnaire wizard and set steps directly to Question 1 for all desks
     setLoanAmount('');
     setLoanArea('');
-    setLoanStep(1);
     
+    const initialFullName = visitorContact?.fullName || `Anonymous ${type === 'loan' ? 'Loan' : type === 'legal' ? 'Legal' : 'Insurance'} Customer`;
+    const initialPhone = visitorContact?.phone || 'N/A';
+    const initialEmail = visitorContact?.email || 'N/A';
+
     setModalFormData({
-      fullName: visitorContact?.fullName || `Anonymous ${type === 'loan' ? 'Loan' : type === 'legal' ? 'Legal' : 'Insurance'} Customer`,
-      phone: visitorContact?.phone || 'N/A',
-      email: visitorContact?.email || 'N/A'
+      fullName: initialFullName,
+      phone: initialPhone,
+      email: initialEmail
     });
 
     setInbuiltDirectModal({
@@ -435,6 +447,62 @@ export default function App() {
       type,
       title: name
     });
+
+    if (type === 'insurance' || type === 'legal') {
+      // Don't ask anything! Immediately submit form and set step to 3
+      setLoanStep(3);
+      
+      const newId = `lead-${Date.now()}`;
+      const payload: InquiryLead = {
+        id: newId,
+        fullName: initialFullName,
+        phone: initialPhone,
+        email: initialEmail,
+        leadType: type,
+        subType: name,
+        details: `Immediate callback request for ${name} (${type} section). No questions asked as per streamlined user experience.`,
+        status: 'New',
+        createdAt: new Date().toISOString()
+      };
+
+      // Construct prefilled Email notification trigger
+      const mailtoSubject = encodeURIComponent(`[URGENT CALLBACK INQUIRY] [customer reach] - ${payload.fullName} requires ${payload.subType}`);
+      const mailtoBody = encodeURIComponent(
+        `Hi Sanket,\n\nA new customer wants an immediate callback. Segment Details:\n\n` +
+        `- Client Name: ${payload.fullName}\n` +
+        `- Contact Number: ${payload.phone}\n` +
+        `- Email Address: ${payload.email}\n` +
+        `- Chosen Desk Segment: ${type.toUpperCase()}\n` +
+        `- Chosen Service: ${payload.subType}\n` +
+        `- Handled On: ${new Date().toLocaleString()}\n` +
+        `- Remarks Mail: Customer Reach\n\n` +
+        `This message has been dispatched immediately to you via system sync. Make contact now!`
+      );
+      const emailUrl = `mailto:sanketbhavsar27@gmail.com?subject=${mailtoSubject}&body=${mailtoBody}`;
+
+      // WhatsApp Alert
+      const whatsappMessage = `Hello Sanket Champaneri inside SR Finserv,\nMy name is ${payload.fullName} (${payload.phone}).\nI requested a callback for: ${payload.subType}.\n\nPlease contact me in 1 hour!`;
+      const whatsappUrl = `https://wa.me/918487974404?text=${encodeURIComponent(whatsappMessage)}`;
+
+      setSubmittedMailtoUrl(emailUrl);
+      setSubmittedWhatsappUrl(whatsappUrl);
+
+      // Send backend automated system email notification!
+      sendSystemEmailNotification(payload);
+
+      try {
+        await setDoc(doc(db, 'leads', newId), payload);
+        triggerNotification(
+          'Inquiry Transmitted',
+          'Thank you for visit our representative will give you a call back within one hour',
+          'success'
+        );
+      } catch (e) {
+        console.warn("Direct connection Firestore log error:", e);
+      }
+    } else {
+      setLoanStep(1);
+    }
   };
 
   // Turn-by-turn questionnaire submit handler for loan (financial), legal, and insurance products
@@ -1387,6 +1455,179 @@ export default function App() {
                 )}
 
               </div>
+
+              {/* 7-Step Document and Profile Double-Check Verification Section */}
+              <div className="mt-20 pt-16 border-t border-slate-200">
+                <div className="text-center max-w-2xl mx-auto mb-12">
+                  <span className="text-xs uppercase tracking-widest text-blue-600 font-extrabold font-mono bg-blue-50 px-3.5 py-1.5 rounded-full">
+                    🛡️ Verification Rigor
+                  </span>
+                  <h2 className="font-display text-2xl sm:text-3xl font-black text-brand-navy-900 mt-4 leading-tight">
+                    Our 7-Step Profile & Document Double-Check System
+                  </h2>
+                  <p className="text-xs sm:text-sm text-slate-500 font-semibold leading-relaxed mt-2.5">
+                    How we meticulously review and pre-screen your application files to ensure direct, seamless approval.
+                  </p>
+                </div>
+
+                {/* 7 steps bento/timeline grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {/* Step 1 */}
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 hover:border-blue-400 hover:shadow-xs transition-all relative">
+                    <span className="absolute -top-3 -left-3 w-8 h-8 rounded-full bg-blue-600 text-white font-black text-xs flex items-center justify-center shadow-sm">
+                      1
+                    </span>
+                    <h3 className="font-display font-extrabold text-slate-900 mt-2 text-sm">
+                      Seen & Verifying Docs Properly
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-2 font-semibold leading-relaxed">
+                      We thoroughly inspect every primary financial document, KYC profile, and statement to eliminate standard submission discrepancies.
+                    </p>
+                  </div>
+
+                  {/* Step 2 */}
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 hover:border-blue-400 hover:shadow-xs transition-all relative">
+                    <span className="absolute -top-3 -left-3 w-8 h-8 rounded-full bg-blue-600 text-white font-black text-xs flex items-center justify-center shadow-sm">
+                      2
+                    </span>
+                    <h3 className="font-display font-extrabold text-slate-900 mt-2 text-sm">
+                      Obligations & Eligibility Analysis
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-2 font-semibold leading-relaxed">
+                      We check existing debts, FOIR ratio, and EMI history to calculate your highest possible eligible loan amount.
+                    </p>
+                  </div>
+
+                  {/* Step 3 */}
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 hover:border-blue-400 hover:shadow-xs transition-all relative">
+                    <span className="absolute -top-3 -left-3 w-8 h-8 rounded-full bg-blue-600 text-white font-black text-xs flex items-center justify-center shadow-sm">
+                      3
+                    </span>
+                    <h3 className="font-display font-extrabold text-slate-900 mt-2 text-sm">
+                      Property Check as per Available Docs
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-2 font-semibold leading-relaxed">
+                      We analyze property documents, clearance certificates, and plans in detail before official submission.
+                    </p>
+                  </div>
+
+                  {/* Step 4 */}
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 hover:border-blue-400 hover:shadow-xs transition-all relative">
+                    <span className="absolute -top-3 -left-3 w-8 h-8 rounded-full bg-blue-600 text-white font-black text-xs flex items-center justify-center shadow-sm">
+                      4
+                    </span>
+                    <h3 className="font-display font-extrabold text-slate-900 mt-2 text-sm">
+                      Rate of Interest & Processing Fees
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-2 font-semibold leading-relaxed">
+                      We align processing fees and negotiate the absolute lowest rate of interest (ROI) as per Customer profile.
+                    </p>
+                  </div>
+
+                  {/* Step 5 */}
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 hover:border-blue-400 hover:shadow-xs transition-all relative">
+                    <span className="absolute -top-3 -left-3 w-8 h-8 rounded-full bg-blue-600 text-white font-black text-xs flex items-center justify-center shadow-sm">
+                      5
+                    </span>
+                    <h3 className="font-display font-extrabold text-slate-900 mt-2 text-sm">
+                      Suitable Bank or Finance Matching
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-2 font-semibold leading-relaxed">
+                      We match your specific profile criteria with the best and most supportive national bank or financial institution.
+                    </p>
+                  </div>
+
+                  {/* Step 6 */}
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 hover:border-blue-400 hover:shadow-xs transition-all relative">
+                    <span className="absolute -top-3 -left-3 w-8 h-8 rounded-full bg-blue-600 text-white font-black text-xs flex items-center justify-center shadow-sm">
+                      6
+                    </span>
+                    <h3 className="font-display font-extrabold text-slate-900 mt-2 text-sm">
+                      Login File in System
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-2 font-semibold leading-relaxed">
+                      Your pre-verified file is cleanly logged into the banking network with proper backend tracking.
+                    </p>
+                  </div>
+
+                  {/* Step 7 */}
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 hover:border-blue-400 hover:shadow-xs transition-all relative md:col-span-2 lg:col-span-2">
+                    <span className="absolute -top-3 -left-3 w-8 h-8 rounded-full bg-emerald-600 text-white font-black text-xs flex items-center justify-center shadow-sm">
+                      7
+                    </span>
+                    <h3 className="font-display font-extrabold text-slate-900 mt-2 text-sm text-emerald-700 flex items-center gap-1.5">
+                      🌟 Get Approved Successfully!
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-2 font-semibold leading-relaxed">
+                      Continuous coordination with financial underwriters to deliver your official sanction letter promptly.
+                    </p>
+                  </div>
+                </div>
+
+                {/* High Approval Ratio and High Chances Callout Banner */}
+                <div className="mt-12 bg-gradient-to-br from-[#1e3a8a] to-[#0f172a] text-white p-8 sm:p-10 rounded-3xl relative overflow-hidden shadow-xl border border-slate-800">
+                  <div className="absolute top-0 right-0 p-8 opacity-10 select-none text-8xl font-black">
+                    📈
+                  </div>
+                  <div className="relative z-10 max-w-3xl">
+                    <span className="text-[10px] uppercase tracking-widest font-black text-blue-300 bg-blue-500/15 px-3 py-1.5 rounded-full inline-block font-mono">
+                      Bespoke Home Loan Promise
+                    </span>
+                    <h3 className="font-display text-2xl sm:text-3xl font-black mt-3 leading-tight tracking-tight">
+                      High Approval Chances & Ratio for Your Home Loans
+                    </h3>
+                    <p className="text-xs text-slate-300 font-bold leading-relaxed mt-2.5">
+                      By performing these deep-level pre-checks on your documents, we remove the guesswork and help you secure bank approvals with high ratios and speed.
+                    </p>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-8 pt-6 border-t border-slate-700/50">
+                      <div className="flex items-start gap-2.5">
+                        <span className="text-blue-400 text-sm">⏱️</span>
+                        <div>
+                          <p className="text-xs font-black text-white">Minimum Days</p>
+                          <p className="text-[10px] text-slate-400 font-semibold">Processed in record-low turnaround</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2.5">
+                        <span className="text-blue-400 text-sm">📄</span>
+                        <div>
+                          <p className="text-xs font-black text-white">Less Documentation</p>
+                          <p className="text-[10px] text-slate-400 font-semibold">Zero hassle, we coordinate the forms</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2.5">
+                        <span className="text-blue-400 text-sm">💎</span>
+                        <div>
+                          <p className="text-xs font-black text-white">Minimum Expense</p>
+                          <p className="text-[10px] text-slate-400 font-semibold">Cost-optimized file setups</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2.5">
+                        <span className="text-blue-400 text-sm">🚀</span>
+                        <div>
+                          <p className="text-xs font-black text-white">Fast Work</p>
+                          <p className="text-[10px] text-slate-400 font-semibold">Direct executive processing channels</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2.5">
+                        <span className="text-blue-400 text-sm">🧭</span>
+                        <div>
+                          <p className="text-xs font-black text-white">Complete Guidance</p>
+                          <p className="text-[10px] text-slate-400 font-semibold">End-to-step guidance at your convenience</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2.5">
+                        <span className="text-blue-400 text-sm">🔒</span>
+                        <div>
+                          <p className="text-xs font-black text-white">No Hidden Charges</p>
+                          <p className="text-[10px] text-slate-400 font-semibold">100% transparent process terms</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
             </div>
           )}
 
@@ -1482,7 +1723,7 @@ export default function App() {
                   </p>
 
                   <p className="text-xs font-mono text-[#2563eb] font-bold">
-                    📍 Office Location: Venus Atlantis Corporate Park, Prahladnagar, Ahmedabad - 380015
+                    📍 Office Location: 87, ground floor, venus alfa bazar, venus atlantis, near shell petrol pump, prahladnagar, satelite, Ahmedabad- 380015
                   </p>
                 </div>
 
@@ -1704,7 +1945,7 @@ export default function App() {
                   <div className="space-y-4 pt-4 border-t border-slate-100 text-xs font-semibold text-slate-600">
                     <div className="flex gap-3">
                       <span className="text-base">📍</span>
-                      <p>Office 87, Near Shell Pump, Venus Atlantis Corporate Park, Prahladnagar, Ahmedabad - 380015</p>
+                      <p>87, ground floor, venus alfa bazar, venus atlantis, near shell petrol pump, prahladnagar, satelite, Ahmedabad- 380015</p>
                     </div>
 
                     <div className="flex gap-3">
@@ -2476,7 +2717,9 @@ export default function App() {
               
               <>
                 <span className="text-[9px] uppercase font-black tracking-widest text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded-full inline-block mb-2 font-mono">
-                  {loanStep === 3 ? "Submission Complete" : `Step ${loanStep} of 2: Inquiry Desk`}
+                  {(inbuiltDirectModal?.type === 'insurance' || inbuiltDirectModal?.type === 'legal')
+                    ? (loanStep === 3 ? "Submission Complete" : "Inquiry Desk")
+                    : (loanStep === 3 ? "Submission Complete" : `Step ${loanStep} of 2: Inquiry Desk`)}
                 </span>
                 <h3 className="font-display font-black text-xl tracking-tight leading-tight">
                   {loanStep === 3 ? "Inquiry Received!" : "Get a Callback"}
@@ -2484,7 +2727,11 @@ export default function App() {
                 <p className="text-[11px] text-slate-300 font-medium leading-relaxed mt-1.5 font-sans">
                   {loanStep === 1 && `Regarding ${inbuiltDirectModal.title}: How much loan are you looking for?`}
                   {loanStep === 2 && `Regarding ${inbuiltDirectModal.title}: In which area/city are you seeking this?`}
-                  {loanStep === 3 && `Thank you for visit! Our representative will reach you in one hour.`}
+                  {loanStep === 3 && (
+                    (inbuiltDirectModal?.type === 'insurance' || inbuiltDirectModal?.type === 'legal')
+                      ? "Thank you for visit our representative will give you a call back within one hour"
+                      : "Thank you for visit! Our representative will reach you in one hour."
+                  )}
                 </p>
               </>
             </div>
@@ -2631,11 +2878,19 @@ export default function App() {
                       Thank you for providing details!
                     </h4>
                     <p className="text-xs text-emerald-950 font-black bg-emerald-50 border border-emerald-100 py-3.5 px-4 rounded-xl leading-relaxed">
-                      Thank you for visit our representative will reach you in one hour.
+                      {inbuiltDirectModal?.type === 'insurance' || inbuiltDirectModal?.type === 'legal'
+                        ? "Thank you for visit our representative will give you a call back within one hour"
+                        : "Thank you for visit our representative will reach you in one hour."}
                     </p>
-                    <p className="text-[11px] text-slate-500 font-semibold leading-relaxed pt-1">
-                      Sanket Champaneri has been double-notified regarding your exact loan requirement: <strong className="text-slate-800">{loanAmount}</strong> in <strong className="text-slate-800">{loanArea}</strong>.
-                    </p>
+                    {inbuiltDirectModal?.type === 'insurance' || inbuiltDirectModal?.type === 'legal' ? (
+                      <p className="text-[11px] text-slate-500 font-semibold leading-relaxed pt-1">
+                        Sanket Champaneri has been double-notified regarding your request for <strong className="text-slate-800">{inbuiltDirectModal.title}</strong>.
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-slate-500 font-semibold leading-relaxed pt-1">
+                        Sanket Champaneri has been double-notified regarding your exact loan requirement: <strong className="text-slate-800">{loanAmount}</strong> in <strong className="text-slate-800">{loanArea}</strong>.
+                      </p>
+                    )}
                   </div>
 
                   <button

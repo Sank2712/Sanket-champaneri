@@ -277,10 +277,39 @@ app.post("/api/send-lead-email", async (req, res) => {
     console.log(`[Email Dispatcher] Email dispatched successfully to ${adminEmail}. MessageID: ${info.messageId}`);
     res.json({ success: true, messageId: info.messageId, leadId: payload.id });
   } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
     console.error("[Email Dispatcher] Failed to dispatch automated notification email through SMTP transport:", error);
+    
+    if (errMsg.includes("Application-specific password required") || errMsg.includes("534-5.7.9") || errMsg.includes("534 5.7.9")) {
+      console.error(
+        `\n========================================================================\n` +
+        `❌ [SMTP AUTHENTICATION ERROR] GMAIL APP PASSWORD REQUIRED\n` +
+        `========================================================================\n` +
+        `Google requires an "App Password" to authenticate SMTP requests when 2-Step\n` +
+        `Verification is enabled. Please follow these simple steps to fix this:\n\n` +
+        `1. Go to your Google Account Settings: https://myaccount.google.com/\n` +
+        `2. Select "Security" in the left menu.\n` +
+        `3. Under "How you sign in to Google", select "2-Step Verification" (ensure it is ON).\n` +
+        `4. Scroll to the bottom of the page and select "App passwords".\n` +
+        `5. Enter an app name (e.g. "SR Finserv" or "AI Studio") and click "Create".\n` +
+        `6. Copy the 16-character password shown on your screen (e.g. "xxxx xxxx xxxx xxxx").\n` +
+        `7. Paste this 16-character code as the value for SMTP_PASS in your AI Studio Settings/Secrets.\n` +
+        `8. Re-trigger the inquiry form to confirm!\n` +
+        `========================================================================\n`
+      );
+      
+      res.status(200).json({
+        success: true,
+        warn: "GMAIL_APP_PASSWORD_REQUIRED",
+        errorDetails: errMsg,
+        leadId: payload.id
+      });
+      return;
+    }
+
     res.status(500).json({
       error: "Failed to dispatch email via SMTP connection.",
-      details: error instanceof Error ? error.message : String(error)
+      details: errMsg
     });
   }
 });

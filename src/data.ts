@@ -187,7 +187,7 @@ export const FAQS = [
   },
   {
     question: 'Where is your physical office located in Ahmedabad?',
-    answer: 'Our corporate office is located at: Venus Atlantis Corporate Park, Prahladnagar, Ahmedabad - 380015. You are welcome to copy the location on the map section in our contact screen to visit our desk for personalized legal and underwrite consultancy.'
+    answer: 'Our corporate office is located at: 87, ground floor, venus alfa bazar, venus atlantis, near shell petrol pump, prahladnagar, satelite, Ahmedabad- 380015. You are welcome to copy the location on the map section in our contact screen to visit our desk for personalized legal and underwrite consultancy.'
   },
   {
     question: 'How do you simplify complicated banking and legal workflows?',
