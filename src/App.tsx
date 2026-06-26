@@ -22,7 +22,8 @@ import {
   MessageCircle,
   FileCheck,
   Check,
-  Instagram
+  Instagram,
+  Printer
 } from 'lucide-react';
 import { LOAN_SERVICES, LEGAL_SERVICES, INSURANCE_SERVICES, FAQS } from './data';
 import { InquiryLead, LeadType, ClientTestimonial, VisitorBookEntry } from './types';
@@ -121,6 +122,29 @@ export default function App() {
   const [loanStep, setLoanStep] = useState<number>(0);
   const [loanAmount, setLoanAmount] = useState<string>('');
   const [loanArea, setLoanArea] = useState<string>('');
+  const [isSalaried, setIsSalaried] = useState<boolean | null>(null);
+  const [uploadedDocsList, setUploadedDocsList] = useState<{
+    docName: string;
+    fileName: string;
+    fileData: string;
+    fileSize?: string;
+    uploadedAt?: string;
+    ocrDocType?: string;
+    ocrDocDate?: string;
+    ocrStatus?: 'success' | 'failed' | 'processing';
+    extractedSummary?: string;
+  }[]>([]);
+  const [activeViewingDoc, setActiveViewingDoc] = useState<{
+    docName: string;
+    fileName: string;
+    fileData: string;
+    fileSize?: string;
+    uploadedAt?: string;
+    ocrDocType?: string;
+    ocrDocDate?: string;
+    ocrStatus?: 'success' | 'failed' | 'processing';
+    extractedSummary?: string;
+  } | null>(null);
 
   // Add Testimonial State
   const [newTestimonial, setNewTestimonial] = useState({
@@ -144,6 +168,8 @@ export default function App() {
   const [crmTypeFilter, setCrmTypeFilter] = useState<'all' | 'loan' | 'legal' | 'insurance'>('all');
   const [crmSearchQuery, setCrmSearchQuery] = useState('');
   const [crmStatusFilter, setCrmStatusFilter] = useState<'all' | 'New' | 'active' | 'resolved'>('all');
+  const [crmSortBy, setCrmSortBy] = useState<'dateDesc' | 'dateAsc' | 'category' | 'docsCountDesc'>('dateDesc');
+  const [crmDocSortBy, setCrmDocSortBy] = useState<'category' | 'dateUploaded' | 'size'>('category');
 
   // Visitor direct 1-click details state (persisted)
   const [visitorContact, setVisitorContact] = useState<{ fullName: string; phone: string; email: string } | null>(() => {
@@ -310,6 +336,123 @@ export default function App() {
     }, 4500);
   };
 
+  // Document printer helper
+  const handlePrintDocument = (docItem: any) => {
+    if (!docItem || !docItem.fileData) return;
+    
+    triggerNotification('Preparing Print Job 🖨️', 'Opening the system print dialogue for your document...', 'info');
+
+    // Create a temporary iframe for printing
+    const printFrame = document.createElement('iframe');
+    printFrame.style.position = 'fixed';
+    printFrame.style.right = '0';
+    printFrame.style.bottom = '0';
+    printFrame.style.width = '0';
+    printFrame.style.height = '0';
+    printFrame.style.border = '0';
+    document.body.appendChild(printFrame);
+
+    const docType = docItem.fileData.split(';')[0]?.split(':')[1] || '';
+    
+    if (docType.startsWith('image/')) {
+      printFrame.onload = () => {
+        try {
+          printFrame.contentWindow?.focus();
+          printFrame.contentWindow?.print();
+          setTimeout(() => {
+            if (document.body.contains(printFrame)) {
+              document.body.removeChild(printFrame);
+            }
+          }, 1000);
+        } catch (e) {
+          console.error("Failed to print image document:", e);
+        }
+      };
+      
+      const docHtml = `
+        <html>
+          <head>
+            <title>${docItem.docName} - Print</title>
+            <style>
+              body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #white; }
+              img { max-width: 100%; max-height: 100%; object-fit: contain; }
+              @page { size: auto; margin: 10mm; }
+            </style>
+          </head>
+          <body>
+            <img src="${docItem.fileData}" />
+          </body>
+        </html>
+      `;
+      printFrame.contentDocument?.write(docHtml);
+      printFrame.contentDocument?.close();
+    } else if (docType.startsWith('application/pdf')) {
+      printFrame.src = docItem.fileData;
+      printFrame.onload = () => {
+        try {
+          printFrame.contentWindow?.focus();
+          printFrame.contentWindow?.print();
+          setTimeout(() => {
+            if (document.body.contains(printFrame)) {
+              document.body.removeChild(printFrame);
+            }
+          }, 1500);
+        } catch (e) {
+          console.error("Direct PDF print failed:", e);
+          const win = window.open(docItem.fileData);
+          if (win) {
+            win.onload = () => {
+              win.print();
+            };
+          } else {
+            triggerNotification('Popup Blocked', 'Please allow popups to print/view PDF files directly.', 'warning');
+          }
+          if (document.body.contains(printFrame)) {
+            document.body.removeChild(printFrame);
+          }
+        }
+      };
+    } else {
+      printFrame.onload = () => {
+        try {
+          printFrame.contentWindow?.focus();
+          printFrame.contentWindow?.print();
+          setTimeout(() => {
+            if (document.body.contains(printFrame)) {
+              document.body.removeChild(printFrame);
+            }
+          }, 1000);
+        } catch (e) {
+          console.error("Fallback print failed:", e);
+        }
+      };
+      
+      const docHtml = `
+        <html>
+          <head>
+            <title>${docItem.docName} - Print</title>
+            <style>
+              body { font-family: system-ui, sans-serif; padding: 40px; color: #1e293b; }
+              h2 { border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 16px; font-size: 20px; }
+              p { margin: 8px 0; font-size: 14px; }
+              .meta-label { font-weight: bold; color: #64748b; }
+              .data-preview { background: #f1f5f9; padding: 16px; border-radius: 8px; font-family: monospace; font-size: 12px; white-space: pre-wrap; margin-top: 24px; border: 1px solid #e2e8f0; }
+            </style>
+          </head>
+          <body>
+            <h2>Document Audit Report - SR Finserv Advisor CRM</h2>
+            <p><span class="meta-label">Document:</span> ${docItem.docName}</p>
+            <p><span class="meta-label">Original File:</span> ${docItem.fileName}</p>
+            <p><span class="meta-label">Processed Timestamp:</span> ${new Date().toLocaleString()}</p>
+            <div class="data-preview">Inline non-rendered binary base64 raw attachment data.</div>
+          </body>
+        </html>
+      `;
+      printFrame.contentDocument?.write(docHtml);
+      printFrame.contentDocument?.close();
+    }
+  };
+
   // Handle secret clicking of the Logo to activate PIN challenge
   const handleLogoClick = () => {
     setActiveTab('home');
@@ -431,6 +574,8 @@ export default function App() {
     // Reset questionnaire wizard and set steps directly to Question 1 for all desks
     setLoanAmount('');
     setLoanArea('');
+    setIsSalaried(null);
+    setUploadedDocsList([]);
     
     const initialFullName = visitorContact?.fullName || `Anonymous ${type === 'loan' ? 'Loan' : type === 'legal' ? 'Legal' : 'Insurance'} Customer`;
     const initialPhone = visitorContact?.phone || 'N/A';
@@ -510,6 +655,11 @@ export default function App() {
     const newId = `lead-${Date.now()}`;
     const curType = inbuiltDirectModal?.type || 'loan';
     const fallbackName = `Anonymous ${curType === 'loan' ? 'Loan' : curType === 'legal' ? 'Legal' : 'Insurance'} Customer`;
+    
+    const docSummaryText = uploadedDocsList.length > 0 
+      ? `\n- Attached Documents: ` + uploadedDocsList.map(d => d.docName).join(', ') 
+      : `\n- Attached Documents: None`;
+
     const payload: InquiryLead = {
       id: newId,
       fullName: modalFormData.fullName.trim() || visitorContact?.fullName || fallbackName,
@@ -517,9 +667,12 @@ export default function App() {
       email: modalFormData.email.trim() || visitorContact?.email || 'N/A',
       leadType: curType,
       subType: inbuiltDirectModal?.title || 'Unknown Service',
-      details: `Loan Amount: ${loanAmount.trim() || 'Not specified'}. City Area: ${loanArea.trim() || 'Not specified'}.`,
+      details: `Loan Amount: ${loanAmount.trim() || 'Not specified'}. City Area: ${loanArea.trim() || 'Not specified'}.` + 
+               (isSalaried ? ` [Salaried Professional] Uploaded Documents count: ${uploadedDocsList.length}` : ` [Self-Employed] Uploaded Documents count: ${uploadedDocsList.length}`),
       status: 'New',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      isSalaried: isSalaried === true,
+      uploadedDocs: uploadedDocsList
     };
 
     // Construct prefilled Email notification trigger with user's specific contact details and answers
@@ -533,6 +686,8 @@ export default function App() {
       `- Chosen Service: ${payload.subType}\n` +
       `- Loan Amount Looking For: ${loanAmount.trim() || 'N/A'}\n` +
       `- Area/City Location: ${loanArea.trim() || 'N/A'}\n` +
+      `- Salaried Employee: ${isSalaried ? 'Yes' : 'No'}\n` +
+      docSummaryText + `\n` +
       `- Handled On: ${new Date().toLocaleString()}\n` +
       `- Remarks Mail: Customer Reach\n\n` +
       `This message has been dispatched immediately to you via system sync. Make contact now!`
@@ -540,7 +695,8 @@ export default function App() {
     const emailUrl = `mailto:sanketbhavsar27@gmail.com?subject=${mailtoSubject}&body=${mailtoBody}`;
 
     // WhatsApp Alert
-    const whatsappMessage = `Hello Sanket Champaneri inside SR Finserv,\nMy name is ${payload.fullName} (${payload.phone}).\nI requested a callback for: ${payload.subType}.\n\n- Loan Amount: ${loanAmount.trim() || 'N/A'}\n- City Area: ${loanArea.trim() || 'N/A'}.\n\nPlease contact me in 1 hour!`;
+    const docCountText = uploadedDocsList.length > 0 ? ` with ${uploadedDocsList.length} documents uploaded!` : '.';
+    const whatsappMessage = `Hello Sanket Champaneri inside SR Finserv,\nMy name is ${payload.fullName} (${payload.phone}).\nI requested a callback for: ${payload.subType}${docCountText}\n\n- Loan Amount: ${loanAmount.trim() || 'N/A'}\n- City Area: ${loanArea.trim() || 'N/A'}.\n- Salaried: ${isSalaried ? 'Yes' : 'No'}\n\nPlease contact me in 1 hour!`;
     const whatsappUrl = `https://wa.me/918487974404?text=${encodeURIComponent(whatsappMessage)}`;
 
     setSubmittedMailtoUrl(emailUrl);
@@ -779,7 +935,7 @@ export default function App() {
 
   // CRM entry filters
   const filteredCrmLeads = useMemo(() => {
-    return leads.filter((lead) => {
+    const filtered = leads.filter((lead) => {
       const q = crmSearchQuery.toLowerCase();
       const matchesSearch = 
         lead.fullName.toLowerCase().includes(q) || 
@@ -801,7 +957,26 @@ export default function App() {
       
       return matchesSearch && matchesType && matchesStatus;
     });
-  }, [leads, crmSearchQuery, crmTypeFilter, crmStatusFilter]);
+
+    // Apply sorting to the filtered list
+    return [...filtered].sort((a, b) => {
+      if (crmSortBy === 'dateDesc') {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+      if (crmSortBy === 'dateAsc') {
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      }
+      if (crmSortBy === 'category') {
+        return a.leadType.localeCompare(b.leadType) || a.subType.localeCompare(b.subType);
+      }
+      if (crmSortBy === 'docsCountDesc') {
+        const countA = a.uploadedDocs?.length || 0;
+        const countB = b.uploadedDocs?.length || 0;
+        return countB - countA;
+      }
+      return 0;
+    });
+  }, [leads, crmSearchQuery, crmTypeFilter, crmStatusFilter, crmSortBy]);
 
   return (
     <div className="min-h-screen bg-white text-slate-900 font-sans flex flex-col antialiased">
@@ -1324,11 +1499,23 @@ export default function App() {
                         return (
                           <div 
                             key={loan.id}
-                            onClick={() => handlePrefillInquiry('loan', loan.id, loan.title)}
+                            onClick={() => {
+                              if (loan.isComingSoon) {
+                                triggerNotification(
+                                  'Product Launch Status ⏳',
+                                  `Our ${loan.title} service is coming soon! We are actively finalizing prioritized bank tie-ups. Stay tuned for seamless doorstep processing.`,
+                                  'info'
+                                );
+                                return;
+                              }
+                              handlePrefillInquiry('loan', loan.id, loan.title);
+                            }}
                             className={`flex flex-col justify-between transition-all group cursor-pointer rounded-3xl p-6 border relative ${
                               isSelected 
                                 ? 'border-2 border-blue-600 ring-4 ring-blue-500/10 shadow-lg bg-blue-50/10 scale-[1.02]' 
-                                : 'bg-white hover:bg-slate-50/50 border-slate-200 hover:border-blue-300 hover:shadow-md'
+                                : loan.isComingSoon
+                                  ? 'bg-slate-50/60 border-slate-200/80 hover:border-amber-300 opacity-85 hover:shadow-xs'
+                                  : 'bg-white hover:bg-slate-50/50 border-slate-200 hover:border-blue-300 hover:shadow-md'
                             }`}
                           >
                             {isSelected && (
@@ -1336,16 +1523,32 @@ export default function App() {
                                 🎯 Selected Option ✓
                               </div>
                             )}
+                            {loan.isComingSoon && (
+                              <div className="absolute -top-3 right-4 bg-amber-500 text-white text-[9px] font-black uppercase px-2.5 py-1 rounded-full shadow-xs tracking-wider flex items-center gap-1">
+                                ⏳ Coming Soon
+                              </div>
+                            )}
                             <div className="space-y-4">
-                              <h4 className="font-display font-extrabold text-brand-navy-900 group-hover:text-blue-600 transition-colors text-base leading-snug">
+                              <h4 className={`font-display font-extrabold transition-colors text-base leading-snug ${
+                                loan.isComingSoon ? 'text-slate-700' : 'text-brand-navy-900 group-hover:text-blue-600'
+                              }`}>
                                 {loan.title}
                               </h4>
+                              <p className="text-[11px] text-slate-500 font-semibold leading-relaxed">
+                                {loan.description}
+                              </p>
                             </div>
                             <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
                               <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">Advisory service</span>
-                              <span className="text-xs text-blue-600 font-black group-hover:translate-x-1.5 transition-transform inline-flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-xl border border-blue-100">
-                                Inquire Now <ArrowRight className="w-3.5 h-3.5" />
-                              </span>
+                              {loan.isComingSoon ? (
+                                <span className="text-xs text-amber-600 font-black inline-flex items-center gap-1.5 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-100">
+                                  Coming Soon ⏳
+                                </span>
+                              ) : (
+                                <span className="text-xs text-blue-600 font-black group-hover:translate-x-1.5 transition-transform inline-flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-xl border border-blue-100">
+                                  Inquire Now <ArrowRight className="w-3.5 h-3.5" />
+                                </span>
+                              )}
                             </div>
                           </div>
                         );
@@ -2280,6 +2483,20 @@ export default function App() {
                       </select>
                     </div>
                   </div>
+
+                  <div className="space-y-1 pt-2 border-t border-slate-100">
+                    <label className="text-[9px] uppercase font-bold text-slate-400">Sort Workspace Leads</label>
+                    <select
+                      value={crmSortBy}
+                      onChange={(e: any) => setCrmSortBy(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 text-[11px] font-bold rounded-lg p-2 outline-none cursor-pointer text-slate-700"
+                    >
+                      <option value="dateDesc">📅 Submission Date: Newest First</option>
+                      <option value="dateAsc">📅 Submission Date: Oldest First</option>
+                      <option value="category">🗂️ Category Type (Loan, Legal, etc.)</option>
+                      <option value="docsCountDesc">📂 Attached Documents Count: High to Low</option>
+                    </select>
+                  </div>
                 </div>
 
                 {/* Vertical Leads Card List */}
@@ -2413,10 +2630,113 @@ export default function App() {
 
                       {/* Submitted context details statement */}
                       <div className="space-y-2">
-                        <span className="text-[10px] uppercase tracking-wide font-black text-slate-405 block">Client Message Submission</span>
+                        <span className="text-[10px] uppercase tracking-wide font-black text-slate-400 block">Client Message Submission</span>
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 text-xs font-semibold text-slate-700 leading-relaxed whitespace-pre-wrap">
                           {selectedLeadForEdit.details || "No secondary requirements described."}
                         </div>
+                      </div>
+
+                      {/* Uploaded Documents checklist for CRM */}
+                      <div className="space-y-2 pt-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2 mb-2">
+                          <span className="text-[10px] uppercase tracking-wide font-black text-slate-400 block">
+                            Uploaded Client Documents ({selectedLeadForEdit.uploadedDocs?.length || 0})
+                          </span>
+                          
+                          {selectedLeadForEdit.uploadedDocs && selectedLeadForEdit.uploadedDocs.length > 0 && (
+                            <div className="flex items-center gap-1 text-[9.5px] font-black text-slate-500">
+                              <span>Sort:</span>
+                              <select
+                                value={crmDocSortBy}
+                                onChange={(e: any) => setCrmDocSortBy(e.target.value)}
+                                className="bg-slate-50 border border-slate-200 text-[9.5px] font-bold rounded-lg px-2 py-1 outline-none cursor-pointer text-slate-700"
+                              >
+                                <option value="category">🗂️ Type / Category</option>
+                                <option value="dateUploaded">📅 Date Uploaded</option>
+                                <option value="size">⚖️ File Size</option>
+                              </select>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {selectedLeadForEdit.uploadedDocs && selectedLeadForEdit.uploadedDocs.length > 0 ? (
+                          <div className="grid grid-cols-1 gap-2.5">
+                            {[...(selectedLeadForEdit.uploadedDocs)].sort((a, b) => {
+                              if (crmDocSortBy === 'dateUploaded') {
+                                const timeA = a.uploadedAt ? new Date(a.uploadedAt).getTime() : 0;
+                                const timeB = b.uploadedAt ? new Date(b.uploadedAt).getTime() : 0;
+                                return timeB - timeA; // Newest first
+                              }
+                              if (crmDocSortBy === 'size') {
+                                const sizeA = parseFloat(a.fileSize || '0');
+                                const sizeB = parseFloat(b.fileSize || '0');
+                                return sizeB - sizeA; // Largest first
+                              }
+                              return a.docName.localeCompare(b.docName);
+                            }).map((doc) => (
+                              <div key={doc.docName} className="p-3 bg-blue-50/45 rounded-xl border border-blue-100/65 flex flex-col gap-2">
+                                <div className="flex items-start justify-between gap-3 w-full">
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-[11px] font-black text-slate-900 truncate capitalize">{doc.docName}</p>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      <span className="text-[9.5px] text-slate-500 font-semibold truncate">
+                                        {doc.fileName} {doc.fileSize ? `(${doc.fileSize})` : ''}
+                                      </span>
+                                      {doc.uploadedAt && (
+                                        <span className="text-[9px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded">
+                                          🕒 {new Date(doc.uploadedAt).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setActiveViewingDoc(doc)}
+                                    className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-black text-[10.5px] px-3 py-1.5 rounded-lg shadow-3xs cursor-pointer transition-colors"
+                                  >
+                                    Open File 📂
+                                  </button>
+                                </div>
+
+                                {/* OCR Extraction Panel for CRM Advisor */}
+                                {doc.ocrStatus === 'processing' && (
+                                  <div className="flex items-center gap-1.5 text-[9px] text-blue-600 bg-blue-50/60 px-2 py-1.5 rounded-lg border border-blue-100 animate-pulse font-extrabold">
+                                    <span>⏳ Gemini AI OCR extracting document details...</span>
+                                  </div>
+                                )}
+                                {doc.ocrStatus === 'success' && (doc.ocrDocType || doc.ocrDocDate) && (
+                                  <div className="bg-emerald-50/60 border border-emerald-100/85 rounded-xl p-2.5 space-y-1">
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      <span className="text-[8.5px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">
+                                        🤖 AI OCR Verified
+                                      </span>
+                                      <span className="text-[10px] font-black text-slate-900">
+                                        {doc.ocrDocType}
+                                      </span>
+                                      {doc.ocrDocDate && (
+                                        <span className="text-[9px] font-bold text-slate-500">
+                                          (Period/Date: {doc.ocrDocDate})
+                                        </span>
+                                      )}
+                                    </div>
+                                    {doc.extractedSummary && (
+                                      <p className="text-[10px] text-slate-600 font-medium leading-relaxed bg-white/70 p-1.5 rounded border border-emerald-50/40">
+                                        📄 <span className="font-extrabold text-slate-750">Summary:</span> {doc.extractedSummary}
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/50 text-center">
+                            <p className="text-[10.5px] text-slate-500 font-semibold">No documents uploaded by this customer.</p>
+                            {selectedLeadForEdit.isSalaried && (
+                              <p className="text-[9.5px] text-amber-600 font-bold mt-1">⚠️ Note: Customer is marked as Salaried but skipped uploading files.</p>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Interactive Visual Status Progression Timeline Stepper (Milestone Lifeline) */}
@@ -2719,7 +3039,11 @@ export default function App() {
                 <span className="text-[9px] uppercase font-black tracking-widest text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded-full inline-block mb-2 font-mono">
                   {(inbuiltDirectModal?.type === 'insurance' || inbuiltDirectModal?.type === 'legal')
                     ? (loanStep === 3 ? "Submission Complete" : "Inquiry Desk")
-                    : (loanStep === 3 ? "Submission Complete" : `Step ${loanStep} of 2: Inquiry Desk`)}
+                    : (loanStep === 3 ? "Submission Complete" : 
+                       loanStep === 1 ? "Step 1 of 4: Loan Amount" :
+                       loanStep === 2 ? "Step 2 of 4: City Area" :
+                       loanStep === 4 ? "Step 3 of 4: Employment" :
+                       "Step 4 of 4: Upload Documents")}
                 </span>
                 <h3 className="font-display font-black text-xl tracking-tight leading-tight">
                   {loanStep === 3 ? "Inquiry Received!" : "Get a Callback"}
@@ -2727,6 +3051,8 @@ export default function App() {
                 <p className="text-[11px] text-slate-300 font-medium leading-relaxed mt-1.5 font-sans">
                   {loanStep === 1 && `Regarding ${inbuiltDirectModal.title}: How much loan are you looking for?`}
                   {loanStep === 2 && `Regarding ${inbuiltDirectModal.title}: In which area/city are you seeking this?`}
+                  {loanStep === 4 && `Double check profile and documents to pre-screen eligibility`}
+                  {loanStep === 5 && `Instantly upload the 6 required salaried documents`}
                   {loanStep === 3 && (
                     (inbuiltDirectModal?.type === 'insurance' || inbuiltDirectModal?.type === 'legal')
                       ? "Thank you for visit our representative will give you a call back within one hour"
@@ -2855,12 +3181,250 @@ export default function App() {
                     <button
                       type="button"
                       disabled={!loanArea.trim()}
-                      onClick={handleLoanFlowSubmit}
+                      onClick={() => setLoanStep(4)}
                       className={`w-2/3 text-white font-extrabold text-xs py-3 rounded-xl shadow-md transition-colors uppercase tracking-wider text-center ${
                         loanArea.trim() ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer' : 'bg-slate-300 text-slate-500 cursor-not-allowed'
                       }`}
                     >
-                      Get a Callback
+                      Next Step →
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 4: EMPLOYMENT SELECTION */}
+              {loanStep === 4 && (
+                <div className="space-y-4">
+                  <label className="block text-xs font-black uppercase text-slate-700 tracking-wider mb-1">
+                    3) What is your employment type? <span className="text-blue-600">*</span>
+                  </label>
+                  <p className="text-[11px] text-slate-500 font-semibold leading-relaxed mb-4">
+                    Our instant pre-screening document uploader enables both salaried and self-employed customers to submit documents securely for high-ratio direct bank pre-clearance.
+                  </p>
+
+                  <div className="space-y-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsSalaried(true);
+                        setUploadedDocsList([]);
+                        setLoanStep(5);
+                      }}
+                      className={`w-full p-4 rounded-2xl border text-left transition-all flex items-center justify-between group ${
+                        isSalaried === true
+                          ? 'bg-blue-50 border-blue-500 shadow-xs'
+                          : 'bg-slate-50 border-slate-200 hover:border-blue-400 hover:bg-blue-50/10'
+                      }`}
+                    >
+                      <div>
+                        <p className="text-xs font-black text-slate-900">Salaried Professional</p>
+                        <p className="text-[10px] text-slate-500 font-semibold mt-0.5">I have Aadhaar, PAN, Salary Slips, Bank Statements, Form 16 & Offer Letter.</p>
+                      </div>
+                      <span className="text-blue-600 font-black group-hover:translate-x-1 transition-transform">→</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsSalaried(false);
+                        setUploadedDocsList([]);
+                        setLoanStep(5);
+                      }}
+                      className={`w-full p-4 rounded-2xl border text-left transition-all flex items-center justify-between group ${
+                        isSalaried === false
+                          ? 'bg-blue-50 border-blue-500 shadow-xs'
+                          : 'bg-slate-50 border-slate-200 hover:border-blue-400 hover:bg-blue-50/10'
+                      }`}
+                    >
+                      <div>
+                        <p className="text-xs font-black text-slate-900">Self-Employed / Other Profile</p>
+                        <p className="text-[10px] text-slate-500 font-semibold mt-0.5">I have Aadhaar, PAN, 3 years IT returns with balance sheets, GST certificate, Udyam certificate, 1 year bank statement.</p>
+                      </div>
+                      <span className="text-blue-600 font-black group-hover:translate-x-1 transition-transform">→</span>
+                    </button>
+                  </div>
+
+                  <div className="flex gap-2 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => setLoanStep(2)}
+                      className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs py-3 rounded-xl transition-colors uppercase tracking-wider text-center"
+                    >
+                      ← Back
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 5: AUTOMATED DOCUMENT UPLOADER */}
+              {loanStep === 5 && (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-black uppercase text-slate-700 tracking-wider">
+                      4) Automatic Document Uploader
+                    </label>
+                    <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                      {isSalaried ? 'Salaried Profile' : 'Self-Employed Profile'}
+                    </span>
+                  </div>
+                  <p className="text-[10.5px] text-slate-500 font-medium leading-relaxed">
+                    Upload documents below. They will immediately become openable in your consultant CRM to double check details! You can skip any document if not handy.
+                  </p>
+
+                  <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                    {(isSalaried ? [
+                      'Adhar card',
+                      'pan card',
+                      'salary slip (Latest three months)',
+                      '1 year bank statment',
+                      'Form16/IT return 2 years',
+                      'Offer letter'
+                    ] : [
+                      'Adhar card',
+                      'pan card',
+                      'IT return with computation of income, profit and loss account, balance sheet (Latest three years)',
+                      'GST( If applicable )',
+                      'Udyam certificate',
+                      '1years current or saving bank account'
+                    ]).map((docName) => {
+                      const existingFile = uploadedDocsList.find(d => d.docName === docName);
+                      return (
+                        <div key={docName} className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[11px] font-black text-slate-900 truncate capitalize">{docName}</p>
+                            {existingFile ? (
+                              <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                <span className="text-[9.5px] text-emerald-600 font-bold flex items-center gap-1">
+                                  🟢 Attached: {existingFile.fileName}
+                                </span>
+                                {existingFile.ocrStatus === 'processing' && (
+                                  <span className="text-[9px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded font-bold animate-pulse flex items-center gap-1">
+                                    ⏳ Gemini OCR Analyzing...
+                                  </span>
+                                )}
+                                {existingFile.ocrStatus === 'success' && existingFile.ocrDocType && (
+                                  <span className="text-[9px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-extrabold flex items-center gap-0.5">
+                                    ✨ Type: {existingFile.ocrDocType} {existingFile.ocrDocDate ? `| Date: ${existingFile.ocrDocDate}` : ''}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="text-[9.5px] text-slate-450 font-bold mt-0.5">🔴 Pending Upload</p>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                            {existingFile && (
+                              <button
+                                type="button"
+                                onClick={() => setUploadedDocsList(prev => prev.filter(d => d.docName !== docName))}
+                                className="text-red-600 hover:text-red-700 text-[10px] font-black underline mr-1.5 cursor-pointer border-none bg-transparent"
+                                title="Remove document"
+                              >
+                                Remove
+                              </button>
+                            )}
+                            <label className="relative cursor-pointer bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-400 rounded-lg px-2.5 py-1 text-[10.5px] font-black text-blue-600 shadow-3xs transition-all inline-block">
+                              <span>{existingFile ? 'Change' : 'Upload'}</span>
+                              <input
+                                type="file"
+                                className="sr-only"
+                                accept=".pdf,.png,.jpg,.jpeg"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  
+                                  // Read file as Base64 representation so it loads beautifully inside the CRM
+                                  const reader = new FileReader();
+                                  reader.onload = (event) => {
+                                    const base64Str = event.target?.result as string;
+                                    setUploadedDocsList(prev => {
+                                      const filtered = prev.filter(d => d.docName !== docName);
+                                      return [
+                                        ...filtered,
+                                        {
+                                          docName,
+                                          fileName: file.name,
+                                          fileData: base64Str,
+                                          fileSize: `${(file.size / 1024).toFixed(1)} KB`,
+                                          uploadedAt: new Date().toISOString(),
+                                          ocrStatus: 'processing'
+                                        }
+                                      ];
+                                    });
+                                    triggerNotification('Analysis Initiated ⏳', `Gemini OCR is extracting data from ${file.name}...`, 'info');
+
+                                    // Trigger server-side OCR
+                                    fetch('/api/ocr-document', {
+                                      method: 'POST',
+                                      headers: {
+                                        'Content-Type': 'application/json'
+                                      },
+                                      body: JSON.stringify({ fileData: base64Str, docName })
+                                    })
+                                      .then(res => res.json())
+                                      .then(data => {
+                                        if (data.success) {
+                                          setUploadedDocsList(prev => prev.map(d => {
+                                            if (d.docName === docName) {
+                                              return {
+                                                ...d,
+                                                ocrDocType: data.documentType,
+                                                ocrDocDate: data.documentDate,
+                                                ocrStatus: 'success',
+                                                extractedSummary: data.extractedSummary
+                                              };
+                                            }
+                                            return d;
+                                          }));
+                                          triggerNotification('Gemini OCR Completed ✨', `Identified as: ${data.documentType} (${data.documentDate})`, 'success');
+                                        } else {
+                                          throw new Error(data.error || "OCR failed");
+                                        }
+                                      })
+                                      .catch(err => {
+                                        console.error("OCR analysis error:", err);
+                                        setUploadedDocsList(prev => prev.map(d => {
+                                          if (d.docName === docName) {
+                                            return {
+                                              ...d,
+                                              ocrStatus: 'failed'
+                                            };
+                                          }
+                                          return d;
+                                        }));
+                                        triggerNotification('OCR Notice', 'Document saved, but AI automatic detail extraction had an issue.', 'warning');
+                                      });
+                                  };
+                                  reader.readAsDataURL(file);
+                                }}
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="bg-emerald-50/60 border border-emerald-100 p-2.5 rounded-xl text-[10px] text-emerald-900 font-semibold leading-relaxed flex gap-2">
+                    <span>💡</span>
+                    <p>All documents are secured with end-to-end industry bank-grade underwriter storage rules inside SR Finserv database rules.</p>
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setLoanStep(4)}
+                      className="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs py-3 rounded-xl transition-colors uppercase tracking-wider text-center"
+                    >
+                      ← Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleLoanFlowSubmit}
+                      className="w-2/3 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs py-3 rounded-xl shadow-md transition-colors uppercase tracking-wider text-center cursor-pointer"
+                    >
+                      Submit File & Docs →
                     </button>
                   </div>
                 </div>
@@ -2902,6 +3466,111 @@ export default function App() {
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FULLY INTERACTIVE CLIENT DOCUMENT VIEWER MODAL */}
+      {activeViewingDoc && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-[999999] animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full overflow-hidden border border-slate-100 flex flex-col justify-between transform transition-all scale-100">
+            {/* Modal Header */}
+            <div className="bg-brand-navy-900 text-white p-5 flex justify-between items-center">
+              <div>
+                <span className="text-[10px] uppercase font-black tracking-widest text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded-full inline-block mb-1.5 font-mono">
+                  CRM Document Viewer
+                </span>
+                <h3 className="font-display font-black text-lg tracking-tight leading-tight capitalize">
+                  {activeViewingDoc.docName}
+                </h3>
+                <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate max-w-[200px] sm:max-w-[450px]">
+                  File: {activeViewingDoc.fileName}
+                </p>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setActiveViewingDoc(null)}
+                className="text-white/70 hover:text-white hover:bg-white/10 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer text-lg font-black transition-colors"
+                title="Dismiss document viewer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Document Preview Stage */}
+            <div className="p-6 bg-slate-100 flex items-center justify-center min-h-[350px] max-h-[500px] overflow-y-auto">
+              {activeViewingDoc.fileData.startsWith('data:application/pdf;') ? (
+                <iframe
+                  src={activeViewingDoc.fileData}
+                  className="w-full h-[400px] rounded-xl border border-slate-200 bg-white"
+                  title="PDF Preview"
+                />
+              ) : activeViewingDoc.fileData.startsWith('data:image/') ? (
+                <img
+                  src={activeViewingDoc.fileData}
+                  alt={activeViewingDoc.docName}
+                  className="max-w-full max-h-[400px] object-contain rounded-xl shadow-xs border border-slate-200"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="text-center p-8 space-y-4">
+                  <span className="text-4xl">📄</span>
+                  <div>
+                    <p className="text-xs font-black text-slate-800">Binary Document File</p>
+                    <p className="text-[10px] text-slate-500 font-semibold mt-1">This format does not support inline sandboxed previewing.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* OCR Verified details block */}
+            {activeViewingDoc.ocrStatus === 'success' && (activeViewingDoc.ocrDocType || activeViewingDoc.ocrDocDate) && (
+              <div className="mx-6 my-3 bg-emerald-50/60 border border-emerald-100 p-3.5 rounded-2xl space-y-1">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[8.5px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">
+                    🤖 AI OCR Verified
+                  </span>
+                  <span className="text-[11px] font-black text-slate-900">
+                    {activeViewingDoc.ocrDocType}
+                  </span>
+                  {activeViewingDoc.ocrDocDate && (
+                    <span className="text-[10px] font-bold text-slate-500">
+                      (Period/Date: {activeViewingDoc.ocrDocDate})
+                    </span>
+                  )}
+                </div>
+                {activeViewingDoc.extractedSummary && (
+                  <p className="text-[10.5px] text-slate-650 font-medium leading-relaxed">
+                    📄 <span className="font-extrabold text-slate-750">Summary:</span> {activeViewingDoc.extractedSummary}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Footer actions */}
+            <div className="p-4 border-t border-slate-100 flex flex-wrap gap-2.5 justify-end bg-slate-50">
+              <button
+                type="button"
+                onClick={() => handlePrintDocument(activeViewingDoc)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] px-4 py-2.5 rounded-xl shadow-sm cursor-pointer transition-colors uppercase tracking-wider text-center flex items-center gap-1.5"
+              >
+                <Printer className="w-3.5 h-3.5" /> Print Document 🖨️
+              </button>
+              <a
+                href={activeViewingDoc.fileData}
+                download={activeViewingDoc.fileName}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] px-4 py-2.5 rounded-xl shadow-sm cursor-pointer transition-colors uppercase tracking-wider text-center flex items-center gap-1"
+              >
+                Download Original File 📥
+              </a>
+              <button
+                type="button"
+                onClick={() => setActiveViewingDoc(null)}
+                className="bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-[11px] px-4 py-2.5 rounded-xl cursor-pointer transition-colors uppercase tracking-wider text-center"
+              >
+                Close Viewer
+              </button>
             </div>
           </div>
         </div>

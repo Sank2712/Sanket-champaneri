@@ -3,6 +3,7 @@ import path from "path";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
+import { GoogleGenAI, Type } from "@google/genai";
 
 // Load environment variables
 dotenv.config();
@@ -10,8 +11,117 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+// Initialize Gemini Client with user-agent for AI Studio telemetry
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+  httpOptions: {
+    headers: {
+      'User-Agent': 'aistudio-build',
+    }
+  }
+});
+
+// Server-side OCR document endpoint
+app.post("/api/ocr-document", async (req, res) => {
+  const { fileData, docName } = req.body;
+  
+  if (!fileData) {
+    res.status(400).json({ error: "Missing fileData payload for OCR." });
+    return;
+  }
+
+  // Check if GEMINI_API_KEY is available
+  if (!process.env.GEMINI_API_KEY) {
+    console.warn("[OCR] GEMINI_API_KEY is not defined in the environment. Falling back to default mock extraction.");
+    res.json({
+      success: true,
+      documentType: docName || "Unspecified Document",
+      documentDate: new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }),
+      extractedSummary: `Successfully registered file named '${docName || "document"}'. [AI Grounding pending configuration]`,
+      warn: "GEMINI_API_KEY_MISSING"
+    });
+    return;
+  }
+
+  try {
+    const matches = fileData.match(/^data:([^;]+);base64,(.+)$/);
+    if (!matches) {
+      res.status(400).json({ error: "Invalid fileData format. Expected data URI." });
+      return;
+    }
+    const mimeType = matches[1];
+    const base64Data = matches[2];
+
+    console.log(`[OCR] Processing document OCR via Gemini for: ${docName} (MIME: ${mimeType})`);
+
+    const imagePart = {
+      inlineData: {
+        mimeType,
+        data: base64Data,
+      },
+    };
+
+    const promptText = `
+      You are an elite financial underwriter assistant at SR Finserv.
+      Perform high-precision Optical Character Recognition (OCR) on this uploaded document.
+      Identify and extract:
+      1. Document Type (e.g. Aadhaar Card, PAN Card, Salary Slip, Bank Statement, Income Tax Return, GST Certificate, Udyam Certificate, Offer Letter, etc.)
+      2. Document Date / Statement Period (e.g. '15-Mar-2026', 'April 2026', or 'FY 2025-26').
+      3. A short 1-sentence summary of the document, specifically mentioning any client names, company names, or primary numeric figures (e.g., net pay, total tax, address) if legible.
+      
+      The original slot label is: "${docName}". Ground your analysis on both the image visual details and this label.
+    `;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: [imagePart, { text: promptText }],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            documentType: {
+              type: Type.STRING,
+              description: "The extracted type of document, normalized and formatted."
+            },
+            documentDate: {
+              type: Type.STRING,
+              description: "The date or period of the document. If not found, return an empty string."
+            },
+            extractedSummary: {
+              type: Type.STRING,
+              description: "Short 1-sentence summary of the document details."
+            }
+          },
+          required: ["documentType", "documentDate", "extractedSummary"]
+        }
+      }
+    });
+
+    const resultText = response.text?.trim() || "{}";
+    const ocrData = JSON.parse(resultText);
+
+    console.log("[OCR] Extracted data successfully:", ocrData);
+
+    res.json({
+      success: true,
+      documentType: ocrData.documentType || docName || "Extracted Document",
+      documentDate: ocrData.documentDate || "N/A",
+      extractedSummary: ocrData.extractedSummary || "OCR content successfully processed."
+    });
+
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error("[OCR ERROR] Failed to perform OCR via Gemini:", error);
+    res.status(500).json({
+      error: "Failed to process document OCR",
+      details: errMsg
+    });
+  }
+});
 
 // Server-side email notification endpoint
 app.post("/api/send-lead-email", async (req, res) => {

@@ -13,6 +13,18 @@ export interface InquiryLead {
   createdAt: string;
   notes?: string;
   bestTimeToCall?: string;
+  isSalaried?: boolean;
+  uploadedDocs?: {
+    docName: string;
+    fileName: string;
+    fileData: string;
+    fileSize?: string;
+    uploadedAt?: string;
+    ocrDocType?: string;
+    ocrDocDate?: string;
+    ocrStatus?: 'success' | 'failed' | 'processing';
+    extractedSummary?: string;
+  }[];
 }
 
 export interface LoanService {
@@ -24,6 +36,7 @@ export interface LoanService {
   tenureMax: string;
   features: string[];
   documents: string[];
+  isComingSoon?: boolean;
 }
 
 export interface LegalService {

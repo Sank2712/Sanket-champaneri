@@ -43,13 +43,14 @@ export const LOAN_SERVICES: LoanService[] = [
   },
   {
     id: 'vehicle-commercial-loan',
-    title: 'Vehicle & Commercial Machinery Loans',
+    title: 'Commercial Vehicle & Machinery Loans',
     description: 'Fast-track funding for luxurious private cars, high-performance commercial logistics fleets, cranes, and advanced manufacturing machinery.',
     maxAmount: '',
     interestRateMin: 'Dealer Tie-up Specials',
     tenureMax: '',
     features: ['Direct dealer tie-ups', 'Minimal documentation required', 'Doorstep delivery files coordination'],
-    documents: ['Asset Invoice Quotation', 'Bank Statements', 'KYC Papers']
+    documents: ['Asset Invoice Quotation', 'Bank Statements', 'KYC Papers'],
+    isComingSoon: true
   },
   {
     id: 'project-loan',
@@ -59,7 +60,8 @@ export const LOAN_SERVICES: LoanService[] = [
     interestRateMin: 'Tailored Bank Rates',
     tenureMax: '',
     features: ['Detailed Project Report assistance', 'Capital structuring advice', 'Phased commercial release coordinating'],
-    documents: ['Project Report & Valuation Plan', 'Company KYC', 'Financial projections']
+    documents: ['Project Report & Valuation Plan', 'Company KYC', 'Financial projections'],
+    isComingSoon: true
   }
 ];
 
